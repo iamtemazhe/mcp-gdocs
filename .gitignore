@@ -3,6 +3,9 @@ dist/
 *.js.map
 credentials.json
 *.json.bak
-tests/
+tests/*.sh
+tests/run-all.sh
+tests/.env
+tests/integration/
 .env
 .DS_Store

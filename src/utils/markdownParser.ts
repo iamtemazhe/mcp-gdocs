@@ -1,5 +1,6 @@
 import { marked, type Token, type TokensList, type Tokens } from "marked";
 import type { docs_v1 } from "googleapis";
+import { MD_COLORS } from "./colors.js";
 
 type DocsRequest = docs_v1.Schema$Request;
 
@@ -131,13 +132,7 @@ function processInlineTokens(
               weight: 400,
             },
             backgroundColor: {
-              color: {
-                rgbColor: {
-                  red: 0.95,
-                  green: 0.95,
-                  blue: 0.95,
-                },
-              },
+              color: { rgbColor: MD_COLORS.codeBg },
             },
           },
           "weightedFontFamily,backgroundColor",
@@ -154,17 +149,25 @@ function processInlineTokens(
           {
             link: { url: t.href },
             foregroundColor: {
-              color: {
-                rgbColor: {
-                  red: 0.06,
-                  green: 0.33,
-                  blue: 0.8,
-                },
-              },
+              color: { rgbColor: MD_COLORS.link },
             },
             underline: true,
           },
           "link,foregroundColor,underline",
+        );
+        break;
+      }
+      case "del": {
+        const t = token as Tokens.Del;
+        const start = state.index;
+        if (t.tokens) {
+          processInlineTokens(state, t.tokens);
+        } else {
+          insertTextReq(state, t.text);
+        }
+        applyStyle(
+          state, start, state.index,
+          { strikethrough: true }, "strikethrough",
         );
         break;
       }
@@ -233,13 +236,7 @@ function processTokens(
             },
             fontSize: { magnitude: 9, unit: "PT" },
             backgroundColor: {
-              color: {
-                rgbColor: {
-                  red: 0.95,
-                  green: 0.95,
-                  blue: 0.95,
-                },
-              },
+              color: { rgbColor: MD_COLORS.codeBg },
             },
           },
           "weightedFontFamily,fontSize,backgroundColor",
@@ -264,13 +261,7 @@ function processTokens(
           {
             italic: true,
             foregroundColor: {
-              color: {
-                rgbColor: {
-                  red: 0.4,
-                  green: 0.4,
-                  blue: 0.4,
-                },
-              },
+              color: { rgbColor: MD_COLORS.blockquote },
             },
           },
           "italic,foregroundColor",
@@ -278,7 +269,39 @@ function processTokens(
         break;
       }
       case "hr": {
+        const hrStart = state.index;
         insertTextReq(state, "\n");
+        state.requests.push({
+          updateParagraphStyle: {
+            range: {
+              startIndex: hrStart,
+              endIndex: state.index,
+            },
+            paragraphStyle: {
+              borderBottom: {
+                color: {
+                  color: {
+                    rgbColor: MD_COLORS.hrBorder,
+                  },
+                },
+                width: {
+                  magnitude: 1,
+                  unit: "PT",
+                },
+                dashStyle: "SOLID",
+                padding: {
+                  magnitude: 6,
+                  unit: "PT",
+                },
+              },
+              spaceBelow: {
+                magnitude: 6,
+                unit: "PT",
+              },
+            },
+            fields: "borderBottom,spaceBelow",
+          },
+        });
         break;
       }
       case "table": {
@@ -429,10 +452,10 @@ function buildTableFillRequests(
   return reqs;
 }
 
-export function markdownToGoogleDocsRequests(
+function parseMarkdown(
   markdown: string,
-  startIndex: number = 1,
-): DocsRequest[] {
+  startIndex: number,
+): InsertState {
   const tokens = marked.lexer(markdown);
   const state: InsertState = {
     index: startIndex,
@@ -440,7 +463,14 @@ export function markdownToGoogleDocsRequests(
     pendingTableFills: [],
   };
   processTokens(state, tokens);
-  return state.requests;
+  return state;
+}
+
+export function markdownToGoogleDocsRequests(
+  markdown: string,
+  startIndex: number = 1,
+): DocsRequest[] {
+  return parseMarkdown(markdown, startIndex).requests;
 }
 
 /**
@@ -457,13 +487,7 @@ export function markdownToRequestBatches(
   markdown: string,
   startIndex: number = 1,
 ): DocsRequest[][] {
-  const tokens = marked.lexer(markdown);
-  const state: InsertState = {
-    index: startIndex,
-    requests: [],
-    pendingTableFills: [],
-  };
-  processTokens(state, tokens);
+  const state = parseMarkdown(markdown, startIndex);
 
   if (state.pendingTableFills.length === 0) {
     return [state.requests];

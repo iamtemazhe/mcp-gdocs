@@ -6,6 +6,8 @@ import { formatApiError } from "../utils/errors.js";
 import {
   sendBatchedRequests,
   getDocEndIndex,
+  tabIdParam,
+  injectTabId,
 } from "../utils/batch.js";
 
 const insertTextItemSchema = z.object({
@@ -46,10 +48,11 @@ export function registerDocsWriteTools(
     "Insert text at one or multiple positions",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       items: z.array(insertTextItemSchema).min(1)
         .describe("Array of text insertions"),
     },
-    async ({ documentId, items }) => {
+    async ({ documentId, tabId, items }) => {
       try {
         const requests: docs_v1.Schema$Request[] =
           items.map((item) => ({
@@ -59,7 +62,9 @@ export function registerDocsWriteTools(
             },
           }));
 
-        await sendBatchedRequests(documentId, requests);
+        await sendBatchedRequests(
+          documentId, injectTabId(requests, tabId),
+        );
 
         return {
           content: [{
@@ -78,19 +83,24 @@ export function registerDocsWriteTools(
     "Append text to the end of the document",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       text: z.string().describe("Text to append"),
     },
-    async ({ documentId, text }) => {
+    async ({ documentId, tabId, text }) => {
       try {
         const endIndex =
-          await getDocEndIndex(documentId) - 1;
+          await getDocEndIndex(documentId, tabId) - 1;
 
-        await sendBatchedRequests(documentId, [{
+        const reqs: docs_v1.Schema$Request[] = [{
           insertText: {
             location: { index: Math.max(endIndex, 1) },
             text,
           },
-        }]);
+        }];
+
+        await sendBatchedRequests(
+          documentId, injectTabId(reqs, tabId),
+        );
 
         return {
           content: [{
@@ -110,10 +120,11 @@ export function registerDocsWriteTools(
     "Delete one or multiple content ranges",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       items: z.array(deleteRangeItemSchema).min(1)
         .describe("Array of ranges to delete"),
     },
-    async ({ documentId, items }) => {
+    async ({ documentId, tabId, items }) => {
       try {
         const requests: docs_v1.Schema$Request[] =
           items.map((item) => ({
@@ -125,7 +136,9 @@ export function registerDocsWriteTools(
             },
           }));
 
-        await sendBatchedRequests(documentId, requests);
+        await sendBatchedRequests(
+          documentId, injectTabId(requests, tabId),
+        );
 
         return {
           content: [{
@@ -144,13 +157,14 @@ export function registerDocsWriteTools(
     "Replace all occurrences of one or multiple patterns",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       items: z.array(replaceAllItemSchema).min(1)
         .describe("Array of search-replace pairs"),
     },
-    async ({ documentId, items }) => {
+    async ({ documentId, tabId, items }) => {
       try {
         const docs = await getDocsService();
-        const requests: docs_v1.Schema$Request[] =
+        let requests: docs_v1.Schema$Request[] =
           items.map((item) => ({
             replaceAllText: {
               containsText: {
@@ -158,8 +172,13 @@ export function registerDocsWriteTools(
                 matchCase: item.matchCase,
               },
               replaceText: item.replaceText,
+              ...(tabId
+                ? { tabsCriteria: { tabIds: [tabId] } }
+                : {}),
             },
           }));
+
+        requests = injectTabId(requests, tabId);
 
         const result = await docs.documents.batchUpdate({
           documentId,
@@ -191,14 +210,15 @@ export function registerDocsWriteTools(
     "Replace entire document content with new text",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       newContent: z.string().describe(
         "New document content",
       ),
     },
-    async ({ documentId, newContent }) => {
+    async ({ documentId, tabId, newContent }) => {
       try {
         const endIndex =
-          await getDocEndIndex(documentId);
+          await getDocEndIndex(documentId, tabId);
         const requests: docs_v1.Schema$Request[] = [];
 
         if (endIndex > 2) {
@@ -219,7 +239,9 @@ export function registerDocsWriteTools(
           },
         });
 
-        await sendBatchedRequests(documentId, requests);
+        await sendBatchedRequests(
+          documentId, injectTabId(requests, tabId),
+        );
 
         return {
           content: [{
@@ -239,10 +261,11 @@ export function registerDocsWriteTools(
     "Insert page breaks at one or multiple positions",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       items: z.array(pageBreakItemSchema).min(1)
         .describe("Array of positions for page breaks"),
     },
-    async ({ documentId, items }) => {
+    async ({ documentId, tabId, items }) => {
       try {
         const requests: docs_v1.Schema$Request[] =
           items.map((item) => ({
@@ -251,7 +274,9 @@ export function registerDocsWriteTools(
             },
           }));
 
-        await sendBatchedRequests(documentId, requests);
+        await sendBatchedRequests(
+          documentId, injectTabId(requests, tabId),
+        );
 
         return {
           content: [{

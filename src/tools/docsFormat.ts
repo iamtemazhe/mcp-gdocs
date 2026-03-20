@@ -1,7 +1,11 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { formatApiError } from "../utils/errors.js";
-import { sendBatchedRequests } from "../utils/batch.js";
+import {
+  sendBatchedRequests,
+  tabIdParam,
+  injectTabId,
+} from "../utils/batch.js";
 import {
   textStyleItemSchema,
   paragraphStyleItemSchema,
@@ -21,13 +25,16 @@ export function registerDocsFormatTools(
     + "fontFamily, colors",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       items: z.array(textStyleItemSchema).min(1)
         .describe("Array of ranges with styles to apply"),
     },
-    async ({ documentId, items }) => {
+    async ({ documentId, tabId, items }) => {
       try {
         const requests = items.map(buildTextStyleRequest);
-        await sendBatchedRequests(documentId, requests);
+        await sendBatchedRequests(
+          documentId, injectTabId(requests, tabId),
+        );
 
         return {
           content: [{
@@ -48,16 +55,19 @@ export function registerDocsFormatTools(
     + "alignment, lineSpacing, indentation, spacing",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       items: z.array(paragraphStyleItemSchema).min(1)
         .describe(
           "Array of ranges with paragraph styles",
         ),
     },
-    async ({ documentId, items }) => {
+    async ({ documentId, tabId, items }) => {
       try {
         const requests =
           items.map(buildParagraphStyleRequest);
-        await sendBatchedRequests(documentId, requests);
+        await sendBatchedRequests(
+          documentId, injectTabId(requests, tabId),
+        );
 
         return {
           content: [{
@@ -78,16 +88,19 @@ export function registerDocsFormatTools(
     + "(HEADING_1..6 or NORMAL_TEXT)",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       items: z.array(headingStyleItemSchema).min(1)
         .describe(
           "Array of ranges with heading styles",
         ),
     },
-    async ({ documentId, items }) => {
+    async ({ documentId, tabId, items }) => {
       try {
         const requests =
           items.map(buildHeadingStyleRequest);
-        await sendBatchedRequests(documentId, requests);
+        await sendBatchedRequests(
+          documentId, injectTabId(requests, tabId),
+        );
 
         return {
           content: [{

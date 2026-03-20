@@ -2,7 +2,11 @@ import { z } from "zod";
 import type { docs_v1 } from "googleapis";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { formatApiError } from "../utils/errors.js";
-import { sendBatchedRequests } from "../utils/batch.js";
+import {
+  sendBatchedRequests,
+  tabIdParam,
+  injectTabId,
+} from "../utils/batch.js";
 import {
   textStyleItemSchema,
   paragraphStyleItemSchema,
@@ -88,6 +92,7 @@ type BatchRequest = z.infer<typeof batchRequestSchema>;
 
 function mapRequest(
   req: BatchRequest,
+  tabId?: string,
 ): docs_v1.Schema$Request {
   switch (req.type) {
     case "updateTextStyle":
@@ -125,6 +130,9 @@ function mapRequest(
             matchCase: req.matchCase,
           },
           replaceText: req.replaceText,
+          ...(tabId
+            ? { tabsCriteria: { tabIds: [tabId] } }
+            : {}),
         },
       };
 
@@ -164,16 +172,20 @@ export function registerDocsBatchTools(
     + "tables, images. Avoids per-minute quota limits.",
     {
       documentId: z.string().describe("Document ID"),
+      tabId: tabIdParam,
       requests: z
         .array(batchRequestSchema)
         .min(1)
         .describe("Array of operations to execute"),
     },
-    async ({ documentId, requests }) => {
+    async ({ documentId, tabId, requests }) => {
       try {
-        const apiRequests = requests.map(mapRequest);
+        const apiRequests = requests.map(
+          (r) => mapRequest(r, tabId),
+        );
         const sent = await sendBatchedRequests(
-          documentId, apiRequests,
+          documentId,
+          injectTabId(apiRequests, tabId),
         );
 
         const chunks = Math.ceil(sent / 100);

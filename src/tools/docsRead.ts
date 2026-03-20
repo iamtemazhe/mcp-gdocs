@@ -3,6 +3,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDocsService } from "../auth.js";
 import { docToPlainText, docToMarkdown } from "../utils/docReader.js";
 import { formatApiError } from "../utils/errors.js";
+import { tabIdParam } from "../utils/batch.js";
+import { findTab } from "../utils/tabs.js";
 
 export function registerDocsReadTools(server: McpServer): void {
   server.tool(
@@ -10,26 +12,48 @@ export function registerDocsReadTools(server: McpServer): void {
     "Read Google Doc content as text, json, or markdown",
     {
       documentId: z.string().describe("Google Docs document ID"),
+      tabId: tabIdParam,
       format: z
         .enum(["text", "json", "markdown"])
         .default("text")
         .describe("Output format"),
     },
-    async ({ documentId, format }) => {
+    async ({ documentId, tabId, format }) => {
       try {
         const docs = await getDocsService();
-        const doc = await docs.documents.get({ documentId });
+        const doc = await docs.documents.get({
+          documentId,
+          ...(tabId ? { includeTabsContent: true } : {}),
+        });
+
+        let docData = doc.data;
+        if (tabId) {
+          const tab = findTab(doc.data, tabId);
+          if (!tab?.documentTab) {
+            return {
+              content: [{
+                type: "text",
+                text: `Tab "${tabId}" not found`,
+              }],
+              isError: true,
+            };
+          }
+          docData = {
+            ...doc.data,
+            body: tab.documentTab.body,
+          };
+        }
 
         let content: string;
         switch (format) {
           case "json":
-            content = JSON.stringify(doc.data, null, 2);
+            content = JSON.stringify(docData, null, 2);
             break;
           case "markdown":
-            content = docToMarkdown(doc.data);
+            content = docToMarkdown(docData);
             break;
           default:
-            content = docToPlainText(doc.data);
+            content = docToPlainText(docData);
         }
 
         return {

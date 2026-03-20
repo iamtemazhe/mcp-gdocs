@@ -78,7 +78,7 @@ The server starts automatically when the MCP client connects.
 
 ## What Can It Do?
 
-Most write operations accept an `items` array for bulk execution in a single call.
+Most write operations accept an `items` array for bulk execution in a single call. All tools support an optional `tabId` parameter for multi-tab documents.
 
 ### Google Docs
 
@@ -105,7 +105,7 @@ Most write operations accept an `items` array for bulk execution in a single cal
 | `docs_update_table_cell_content` | Update one or multiple cells content                |
 | `docs_update_table_cell_style`   | Cell background color                               |
 | `docs_insert_image`              | Insert one or multiple images from URL              |
-| `docs_replace_with_markdown`     | Replace entire document from Markdown               |
+| `docs_replace_with_markdown`     | Replace entire document from Markdown (headings, lists, tables, strikethrough, HR) |
 | `docs_append_markdown`           | Append Markdown-formatted content                   |
 | `docs_batch_update`              | Batch multiple operations in one API call           |
 
@@ -351,6 +351,7 @@ OAuth refresh tokens are stored in `~/.config/mcp-gdocs/token.json` (respects `X
 - **SA without Workspace:** Service account without Google Workspace license has Drive quota = 0 and cannot create files. Use OAuth or impersonation.
 - **Comment anchoring:** Programmatically created comments appear in the list but may not be anchored to text in Google Docs UI (Drive API limitation).
 - **Deeply nested lists:** Lists with 3+ nesting levels may have formatting artifacts when converting Markdown.
+- **Markdown images:** Images in Markdown syntax (`![alt](url)`) are not yet supported; use `docs_insert_image` separately.
 - **Paragraph style safe range:** `docs_apply_paragraph_style` and `docs_apply_heading_style` automatically shift `startIndex` by +1 (when > 1) to prevent styles from bleeding into the preceding paragraph. This matches Google Docs API behavior where structural element boundaries overlap with the previous paragraph's newline.
 
 ## Troubleshooting

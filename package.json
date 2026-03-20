@@ -1,6 +1,6 @@
 {
   "name": "mcp-gdocs",
-  "version": "1.0.1",
+  "version": "1.1.1",
   "type": "module",
   "description": "MCP server for Google Docs, Drive & Comments (OAuth + Service Account)",
   "author": "Artem Zheleznov (https://github.com/iamtemazhe)",
@@ -25,7 +25,8 @@
     "auth": "node dist/index.js auth",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build",
-    "test": "bash tests/run-all.sh",
+    "test": "node --import tsx --test tests/unit/*.test.ts",
+    "test:integration": "bash tests/run-all.sh",
     "test:drive": "bash tests/run-all.sh drive",
     "test:docs": "bash tests/run-all.sh docs",
     "test:tables": "bash tests/run-all.sh tables",
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.0"
   }
 }
