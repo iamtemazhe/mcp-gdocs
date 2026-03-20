@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.js.map
+credentials.json
+*.json.bak
+tests/
+.env
+.DS_Store

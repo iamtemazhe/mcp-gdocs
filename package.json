@@ -1,0 +1,60 @@
+{
+  "name": "mcp-gdocs",
+  "version": "1.0.1",
+  "type": "module",
+  "description": "MCP server for Google Docs, Drive & Comments (OAuth + Service Account)",
+  "author": "Artem Zheleznov (https://github.com/iamtemazhe)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iamtemazhe/mcp-gdocs.git"
+  },
+  "homepage": "https://github.com/iamtemazhe/mcp-gdocs#readme",
+  "bugs": {
+    "url": "https://github.com/iamtemazhe/mcp-gdocs/issues"
+  },
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-gdocs": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "auth": "node dist/index.js auth",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "test": "bash tests/run-all.sh",
+    "test:drive": "bash tests/run-all.sh drive",
+    "test:docs": "bash tests/run-all.sh docs",
+    "test:tables": "bash tests/run-all.sh tables",
+    "test:markdown": "bash tests/run-all.sh markdown",
+    "test:images": "bash tests/run-all.sh images",
+    "test:comments": "bash tests/run-all.sh comments"
+  },
+  "keywords": [
+    "mcp",
+    "google-docs",
+    "google-drive",
+    "google-comments",
+    "mcp-server",
+    "cursor",
+    "claude"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "google-auth-library": "^9.15.1",
+    "googleapis": "^146.0.0",
+    "marked": "^15.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
