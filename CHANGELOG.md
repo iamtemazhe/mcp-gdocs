@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2] - 2026-03-21
+
+### Changed
+- Faster API calls — only required fields are fetched for metadata, tables, and end-index lookups
+- Docs and Drive service instances are cached across tool calls
+- Improved tool descriptions with references to related tools
+
 ## [1.1.1] - 2026-03-20
 
 ### Added
@@ -11,9 +18,6 @@
 - Unit tests for all utility modules
 
 ### Changed
-- Faster API calls — only required fields are fetched for metadata, tables, and end-index lookups
-- Docs and Drive service instances are cached across tool calls
-- Improved tool descriptions with references to related tools
 - Hex color validation with clear error messages
 - OAuth is now the highest-priority auth method
 
