@@ -4,7 +4,7 @@ import type { docs_v1 } from "googleapis";
 import {
   markdownToRequestBatches,
 } from "../utils/markdownParser.js";
-import { formatApiError } from "../utils/errors.js";
+import { textResult, handleTool } from "../utils/errors.js";
 import {
   sendBatchedRequests,
   getDocEndIndex,
@@ -50,14 +50,16 @@ async function sendBatches(
     );
 
     if (inserts.length > 0) {
-      total += await sendBatchedRequests(
+      const r = await sendBatchedRequests(
         documentId, injectTabId(inserts, tabId),
       );
+      total += r.length;
     }
     if (formats.length > 0) {
-      total += await sendBatchedRequests(
+      const r = await sendBatchedRequests(
         documentId, injectTabId(formats, tabId),
       );
+      total += r.length;
     }
   }
   return total;
@@ -68,81 +70,67 @@ export function registerDocsMarkdownTools(
 ): void {
   server.tool(
     "docs_replace_with_markdown",
-    "Replace entire document content by converting Markdown "
-    + "to a formatted Google Doc (headings, lists, tables, "
-    + "strikethrough, horizontal rules, styles)",
+    "Replace document content with Markdown. Supports headings, "
+    + "bold, italic, strikethrough, links, lists, code blocks, "
+    + "tables, horizontal rules",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
       markdown: z.string().describe("Markdown content"),
     },
-    async ({ documentId, tabId, markdown }) => {
-      try {
-        const endIndex =
-          await getDocEndIndex(documentId, tabId);
+    handleTool(async ({ documentId, tabId, markdown }) => {
+      const endIndex =
+        await getDocEndIndex(documentId, tabId);
 
-        if (endIndex > 2) {
-          const delReqs = injectTabId([{
-            deleteContentRange: {
-              range: {
-                startIndex: 1,
-                endIndex: endIndex - 1,
-              },
+      if (endIndex > 2) {
+        const delReqs = injectTabId([{
+          deleteContentRange: {
+            range: {
+              startIndex: 1,
+              endIndex: endIndex - 1,
             },
-          }], tabId);
-          await sendBatchedRequests(documentId, delReqs);
-        }
-
-        const batches =
-          markdownToRequestBatches(markdown, 1);
-        const total = await sendBatches(
-          documentId, batches, tabId,
-        );
-
-        return {
-          content: [{
-            type: "text",
-            text: `Документ заполнен из Markdown `
-              + `(${total} операций)`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
+          },
+        }], tabId);
+        await sendBatchedRequests(documentId, delReqs);
       }
-    },
+
+      const batches =
+        markdownToRequestBatches(markdown, 1);
+      const total = await sendBatches(
+        documentId, batches, tabId,
+      );
+
+      return textResult(
+        `Документ заполнен из Markdown `
+          + `(${total} операций)`,
+      );
+    }),
   );
 
   server.tool(
     "docs_append_markdown",
-    "Append Markdown content to the end of the document "
-    + "with formatting",
+    "Append Markdown content to document end. Same Markdown "
+    + "features as docs_replace_with_markdown",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
       markdown: z.string().describe("Markdown to append"),
     },
-    async ({ documentId, tabId, markdown }) => {
-      try {
-        const endIndex =
-          await getDocEndIndex(documentId, tabId) - 1;
+    handleTool(async ({ documentId, tabId, markdown }) => {
+      const endIndex =
+        await getDocEndIndex(documentId, tabId) - 1;
 
-        const batches = markdownToRequestBatches(
-          markdown, Math.max(endIndex, 1),
-        );
-        const total = await sendBatches(
-          documentId, batches, tabId,
-        );
+      const batches = markdownToRequestBatches(
+        markdown, Math.max(endIndex, 1),
+      );
+      const total = await sendBatches(
+        documentId, batches, tabId,
+      );
 
-        return {
-          content: [{
-            type: "text",
-            text: `Markdown добавлен в конец документа `
-              + `(${total} операций)`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      return textResult(
+        `Markdown добавлен в конец документа `
+          + `(${total} операций)`,
+      );
+    }),
   );
 }

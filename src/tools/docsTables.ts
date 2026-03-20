@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { docs_v1 } from "googleapis";
 import { getDocsService } from "../auth.js";
-import { formatApiError } from "../utils/errors.js";
+import { textResult, handleTool } from "../utils/errors.js";
 import {
   sendBatchedRequests,
   tabIdParam,
@@ -27,7 +27,8 @@ export function registerDocsTableTools(
 ): void {
   server.tool(
     "docs_insert_table",
-    "Insert an empty table at a specific position",
+    "Insert table at index. Get index from docs_read_document "
+      + "(format: json)",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
@@ -41,33 +42,29 @@ export function registerDocsTableTools(
         "Insert position",
       ),
     },
-    async ({ documentId, tabId, rows, columns, index }) => {
-      try {
-        const reqs = injectTabId([{
-          insertTable: {
-            rows,
-            columns,
-            location: { index },
-          },
-        }], tabId);
+    handleTool(async ({
+      documentId, tabId, rows, columns, index,
+    }) => {
+      const reqs = injectTabId([{
+        insertTable: {
+          rows,
+          columns,
+          location: { index },
+        },
+      }], tabId);
 
-        await sendBatchedRequests(documentId, reqs);
-        return {
-          content: [{
-            type: "text",
-            text: `Таблица ${rows}x${columns} вставлена `
-              + `на позицию ${index}`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      await sendBatchedRequests(documentId, reqs);
+      return textResult(
+        `Таблица ${rows}x${columns} вставлена `
+          + `на позицию ${index}`,
+      );
+    }),
   );
 
   server.tool(
     "docs_insert_table_row",
-    "Insert a row into a table",
+    "Insert rows into table. Get tableStartIndex from "
+      + "docs_read_document (format: json)",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
@@ -83,41 +80,35 @@ export function registerDocsTableTools(
         "Insert below (true) or above (false)",
       ),
     },
-    async (params) => {
-      try {
-        const reqs = injectTabId([{
-          insertTableRow: {
-            tableCellLocation: {
-              tableStartLocation: {
-                index: params.tableStartIndex,
-              },
-              rowIndex: params.rowIndex,
-              columnIndex: params.columnIndex,
+    handleTool(async (params) => {
+      const reqs = injectTabId([{
+        insertTableRow: {
+          tableCellLocation: {
+            tableStartLocation: {
+              index: params.tableStartIndex,
             },
-            insertBelow: params.insertBelow,
+            rowIndex: params.rowIndex,
+            columnIndex: params.columnIndex,
           },
-        }], params.tabId);
+          insertBelow: params.insertBelow,
+        },
+      }], params.tabId);
 
-        await sendBatchedRequests(
-          params.documentId, reqs,
-        );
-        return {
-          content: [{
-            type: "text",
-            text: `Строка вставлена `
-              + `(row=${params.rowIndex}, `
-              + `below=${params.insertBelow})`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      await sendBatchedRequests(
+        params.documentId, reqs,
+      );
+      return textResult(
+        `Строка вставлена `
+          + `(row=${params.rowIndex}, `
+          + `below=${params.insertBelow})`,
+      );
+    }),
   );
 
   server.tool(
     "docs_insert_table_column",
-    "Insert a column into a table",
+    "Insert columns into table. Get tableStartIndex from "
+      + "docs_read_document (format: json)",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
@@ -133,40 +124,34 @@ export function registerDocsTableTools(
         "Insert right (true) or left (false)",
       ),
     },
-    async (params) => {
-      try {
-        const reqs = injectTabId([{
-          insertTableColumn: {
-            tableCellLocation: {
-              tableStartLocation: {
-                index: params.tableStartIndex,
-              },
-              rowIndex: params.rowIndex,
-              columnIndex: params.columnIndex,
+    handleTool(async (params) => {
+      const reqs = injectTabId([{
+        insertTableColumn: {
+          tableCellLocation: {
+            tableStartLocation: {
+              index: params.tableStartIndex,
             },
-            insertRight: params.insertRight,
+            rowIndex: params.rowIndex,
+            columnIndex: params.columnIndex,
           },
-        }], params.tabId);
+          insertRight: params.insertRight,
+        },
+      }], params.tabId);
 
-        await sendBatchedRequests(
-          params.documentId, reqs,
-        );
-        return {
-          content: [{
-            type: "text",
-            text: `Столбец вставлен рядом с `
-              + `column=${params.columnIndex}`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      await sendBatchedRequests(
+        params.documentId, reqs,
+      );
+      return textResult(
+        `Столбец вставлен рядом с `
+          + `column=${params.columnIndex}`,
+      );
+    }),
   );
 
   server.tool(
     "docs_delete_table_row",
-    "Delete a row from a table",
+    "Delete rows from table. Get tableStartIndex from "
+      + "docs_read_document (format: json)",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
@@ -179,38 +164,32 @@ export function registerDocsTableTools(
       columnIndex: z.number().int().min(0).default(0)
         .describe("Reference column index"),
     },
-    async (params) => {
-      try {
-        const reqs = injectTabId([{
-          deleteTableRow: {
-            tableCellLocation: {
-              tableStartLocation: {
-                index: params.tableStartIndex,
-              },
-              rowIndex: params.rowIndex,
-              columnIndex: params.columnIndex,
+    handleTool(async (params) => {
+      const reqs = injectTabId([{
+        deleteTableRow: {
+          tableCellLocation: {
+            tableStartLocation: {
+              index: params.tableStartIndex,
             },
+            rowIndex: params.rowIndex,
+            columnIndex: params.columnIndex,
           },
-        }], params.tabId);
+        },
+      }], params.tabId);
 
-        await sendBatchedRequests(
-          params.documentId, reqs,
-        );
-        return {
-          content: [{
-            type: "text",
-            text: `Строка ${params.rowIndex} удалена`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      await sendBatchedRequests(
+        params.documentId, reqs,
+      );
+      return textResult(
+        `Строка ${params.rowIndex} удалена`,
+      );
+    }),
   );
 
   server.tool(
     "docs_delete_table_column",
-    "Delete a column from a table",
+    "Delete columns from table. Get tableStartIndex from "
+      + "docs_read_document (format: json)",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
@@ -223,38 +202,33 @@ export function registerDocsTableTools(
         "Column index to delete",
       ),
     },
-    async (params) => {
-      try {
-        const reqs = injectTabId([{
-          deleteTableColumn: {
-            tableCellLocation: {
-              tableStartLocation: {
-                index: params.tableStartIndex,
-              },
-              rowIndex: params.rowIndex,
-              columnIndex: params.columnIndex,
+    handleTool(async (params) => {
+      const reqs = injectTabId([{
+        deleteTableColumn: {
+          tableCellLocation: {
+            tableStartLocation: {
+              index: params.tableStartIndex,
             },
+            rowIndex: params.rowIndex,
+            columnIndex: params.columnIndex,
           },
-        }], params.tabId);
+        },
+      }], params.tabId);
 
-        await sendBatchedRequests(
-          params.documentId, reqs,
-        );
-        return {
-          content: [{
-            type: "text",
-            text: `Столбец ${params.columnIndex} удалён`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      await sendBatchedRequests(
+        params.documentId, reqs,
+      );
+      return textResult(
+        `Столбец ${params.columnIndex} удалён`,
+      );
+    }),
   );
 
   server.tool(
     "docs_update_table_cell_content",
-    "Replace content of one or multiple table cells",
+    "Replace table cell content. Get tableStartIndex from "
+      + "docs_read_document (format: json). Rows/columns are "
+      + "0-indexed",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
@@ -264,79 +238,85 @@ export function registerDocsTableTools(
       items: z.array(cellContentItemSchema).min(1)
         .describe("Array of cells to update"),
     },
-    async ({
+    handleTool(async ({
       documentId, tabId, tableStartIndex, items,
     }) => {
-      try {
-        const docs = await getDocsService();
-        const doc = await docs.documents.get({
-          documentId,
-          ...(tabId ? { includeTabsContent: true } : {}),
-        });
+      const docs = await getDocsService();
+      const tableFields =
+        "startIndex,table(tableRows(tableCells("
+        + "content(startIndex,endIndex))))";
+      const fields = tabId
+        ? `tabs(tabProperties(tabId),`
+          + `childTabs(tabProperties(tabId),`
+          + `documentTab(body(content(${tableFields})))),`
+          + `documentTab(body(content(${tableFields}))))`
+        : `body(content(${tableFields}))`;
+      const doc = await docs.documents.get({
+        documentId,
+        fields,
+        ...(tabId ? { includeTabsContent: true } : {}),
+      });
 
-        const sortedItems = [...items].sort((a, b) => {
-          const cellA = getCellInfo(
-            doc.data, tableStartIndex,
-            a.rowIndex, a.columnIndex, tabId,
-          );
-          const cellB = getCellInfo(
-            doc.data, tableStartIndex,
-            b.rowIndex, b.columnIndex, tabId,
-          );
-          return cellB.contentStart - cellA.contentStart;
-        });
+      const table = findTable(
+        doc.data, tableStartIndex, tabId,
+      );
 
-        const requests: docs_v1.Schema$Request[] = [];
+      const cellInfos = items.map((item) =>
+        getCellInfoFromTable(
+          table, item.rowIndex, item.columnIndex,
+        ),
+      );
 
-        for (const item of sortedItems) {
-          const cell = getCellInfo(
-            doc.data, tableStartIndex,
-            item.rowIndex, item.columnIndex, tabId,
-          );
+      const indexed = items.map((item, i) => ({
+        item,
+        cell: cellInfos[i],
+      }));
+      indexed.sort(
+        (a, b) => b.cell.contentStart
+          - a.cell.contentStart,
+      );
 
-          if (cell.contentEnd > cell.contentStart + 1) {
-            requests.push({
-              deleteContentRange: {
-                range: {
-                  startIndex: cell.contentStart,
-                  endIndex: cell.contentEnd - 1,
-                },
+      const requests: docs_v1.Schema$Request[] = [];
+
+      for (const { item, cell } of indexed) {
+        if (cell.contentEnd > cell.contentStart + 1) {
+          requests.push({
+            deleteContentRange: {
+              range: {
+                startIndex: cell.contentStart,
+                endIndex: cell.contentEnd - 1,
               },
-            });
-          }
-
-          if (item.newContent) {
-            requests.push({
-              insertText: {
-                location: { index: cell.contentStart },
-                text: item.newContent,
-              },
-            });
-          }
+            },
+          });
         }
 
-        if (requests.length > 0) {
-          await sendBatchedRequests(
-            documentId,
-            injectTabId(requests, tabId),
-          );
+        if (item.newContent) {
+          requests.push({
+            insertText: {
+              location: { index: cell.contentStart },
+              text: item.newContent,
+            },
+          });
         }
-
-        return {
-          content: [{
-            type: "text",
-            text: `Обновлено ${items.length} ячеек`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
       }
-    },
+
+      if (requests.length > 0) {
+        await sendBatchedRequests(
+          documentId,
+          injectTabId(requests, tabId),
+        );
+      }
+
+      return textResult(
+        `Обновлено ${items.length} ячеек`,
+      );
+    }),
   );
 
   server.tool(
     "docs_update_table_cell_style",
-    "Apply style to one or multiple table cells",
+    "Style table cells (background color). Get tableStartIndex "
+      + "from docs_read_document (format: json)",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
@@ -346,31 +326,24 @@ export function registerDocsTableTools(
       items: z.array(tableCellStyleItemSchema).min(1)
         .describe("Array of cells to style"),
     },
-    async ({
+    handleTool(async ({
       documentId, tabId, tableStartIndex, items,
     }) => {
-      try {
-        const requests = items.map(
-          (item) => buildTableCellStyleRequest(
-            tableStartIndex, item,
-          ),
-        );
+      const requests = items.map(
+        (item) => buildTableCellStyleRequest(
+          tableStartIndex, item,
+        ),
+      );
 
-        await sendBatchedRequests(
-          documentId, injectTabId(requests, tabId),
-        );
+      await sendBatchedRequests(
+        documentId, injectTabId(requests, tabId),
+      );
 
-        return {
-          content: [{
-            type: "text",
-            text: `Стиль применён к `
-              + `${items.length} ячейкам`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      return textResult(
+        `Стиль применён к `
+          + `${items.length} ячейкам`,
+      );
+    }),
   );
 }
 
@@ -394,15 +367,11 @@ function findTable(
   );
 }
 
-function getCellInfo(
-  doc: docs_v1.Schema$Document,
-  tableStartIndex: number,
+function getCellInfoFromTable(
+  table: docs_v1.Schema$Table,
   rowIndex: number,
   columnIndex: number,
-  tabId?: string,
 ): CellInfo {
-  const table = findTable(doc, tableStartIndex, tabId);
-
   const row = table.tableRows?.[rowIndex];
   if (!row) {
     throw new Error(`Row ${rowIndex} not found`);

@@ -302,12 +302,23 @@ export async function runAuthFlow(): Promise<void> {
   await interactiveOAuthFlow();
 }
 
+let cachedDocs: docs_v1.Docs | null = null;
+let cachedDrive: drive_v3.Drive | null = null;
+
 export async function getDocsService(): Promise<docs_v1.Docs> {
+  if (cachedDocs) return cachedDocs;
   const auth = await resolveAuth();
-  return google.docs({ version: "v1", auth: auth as GoogleAuth });
+  cachedDocs = google.docs({
+    version: "v1", auth: auth as GoogleAuth,
+  });
+  return cachedDocs;
 }
 
 export async function getDriveService(): Promise<drive_v3.Drive> {
+  if (cachedDrive) return cachedDrive;
   const auth = await resolveAuth();
-  return google.drive({ version: "v3", auth: auth as GoogleAuth });
+  cachedDrive = google.drive({
+    version: "v3", auth: auth as GoogleAuth,
+  });
+  return cachedDrive;
 }

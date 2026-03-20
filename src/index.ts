@@ -41,7 +41,7 @@ if (process.argv[2] === "auth") {
 const server = new McpServer(
   {
     name: "mcp-gdocs",
-    version: "1.0.0",
+    version: "1.1.1",
   },
   {
     capabilities: {

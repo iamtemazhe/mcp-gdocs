@@ -1,8 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { docs_v1 } from "googleapis";
-import { getDocsService } from "../auth.js";
-import { formatApiError } from "../utils/errors.js";
+import { textResult, handleTool } from "../utils/errors.js";
 import {
   sendBatchedRequests,
   getDocEndIndex,
@@ -45,37 +44,28 @@ export function registerDocsWriteTools(
 ): void {
   server.tool(
     "docs_insert_text",
-    "Insert text at one or multiple positions",
+    "Insert text at index. Get index from docs_read_document (format: json)",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
       items: z.array(insertTextItemSchema).min(1)
         .describe("Array of text insertions"),
     },
-    async ({ documentId, tabId, items }) => {
-      try {
-        const requests: docs_v1.Schema$Request[] =
-          items.map((item) => ({
-            insertText: {
-              location: { index: item.index },
-              text: item.text,
-            },
-          }));
+    handleTool(async ({ documentId, tabId, items }) => {
+      const requests: docs_v1.Schema$Request[] =
+        items.map((item) => ({
+          insertText: {
+            location: { index: item.index },
+            text: item.text,
+          },
+        }));
 
-        await sendBatchedRequests(
-          documentId, injectTabId(requests, tabId),
-        );
+      await sendBatchedRequests(
+        documentId, injectTabId(requests, tabId),
+      );
 
-        return {
-          content: [{
-            type: "text",
-            text: `Выполнено ${items.length} вставок`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      return textResult(`Выполнено ${items.length} вставок`);
+    }),
   );
 
   server.tool(
@@ -86,128 +76,101 @@ export function registerDocsWriteTools(
       tabId: tabIdParam,
       text: z.string().describe("Text to append"),
     },
-    async ({ documentId, tabId, text }) => {
-      try {
-        const endIndex =
-          await getDocEndIndex(documentId, tabId) - 1;
+    handleTool(async ({ documentId, tabId, text }) => {
+      const endIndex =
+        await getDocEndIndex(documentId, tabId) - 1;
 
-        const reqs: docs_v1.Schema$Request[] = [{
-          insertText: {
-            location: { index: Math.max(endIndex, 1) },
-            text,
-          },
-        }];
+      const reqs: docs_v1.Schema$Request[] = [{
+        insertText: {
+          location: { index: Math.max(endIndex, 1) },
+          text,
+        },
+      }];
 
-        await sendBatchedRequests(
-          documentId, injectTabId(reqs, tabId),
-        );
+      await sendBatchedRequests(
+        documentId, injectTabId(reqs, tabId),
+      );
 
-        return {
-          content: [{
-            type: "text",
-            text: `Добавлено ${text.length} символов `
-              + `в конец документа`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      return textResult(
+        `Добавлено ${text.length} символов `
+          + `в конец документа`,
+      );
+    }),
   );
 
   server.tool(
     "docs_delete_range",
-    "Delete one or multiple content ranges",
+    "Delete content ranges. Get startIndex/endIndex from docs_read_document (format: json)",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
       items: z.array(deleteRangeItemSchema).min(1)
         .describe("Array of ranges to delete"),
     },
-    async ({ documentId, tabId, items }) => {
-      try {
-        const requests: docs_v1.Schema$Request[] =
-          items.map((item) => ({
-            deleteContentRange: {
-              range: {
-                startIndex: item.startIndex,
-                endIndex: item.endIndex,
-              },
+    handleTool(async ({ documentId, tabId, items }) => {
+      const requests: docs_v1.Schema$Request[] =
+        items.map((item) => ({
+          deleteContentRange: {
+            range: {
+              startIndex: item.startIndex,
+              endIndex: item.endIndex,
             },
-          }));
+          },
+        }));
 
-        await sendBatchedRequests(
-          documentId, injectTabId(requests, tabId),
-        );
+      await sendBatchedRequests(
+        documentId, injectTabId(requests, tabId),
+      );
 
-        return {
-          content: [{
-            type: "text",
-            text: `Удалено ${items.length} диапазонов`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      return textResult(`Удалено ${items.length} диапазонов`);
+    }),
   );
 
   server.tool(
     "docs_replace_all_text",
-    "Replace all occurrences of one or multiple patterns",
+    "Find and replace text patterns across document. Supports bulk search-replace pairs",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
       items: z.array(replaceAllItemSchema).min(1)
         .describe("Array of search-replace pairs"),
     },
-    async ({ documentId, tabId, items }) => {
-      try {
-        const docs = await getDocsService();
-        let requests: docs_v1.Schema$Request[] =
-          items.map((item) => ({
-            replaceAllText: {
-              containsText: {
-                text: item.searchText,
-                matchCase: item.matchCase,
-              },
-              replaceText: item.replaceText,
-              ...(tabId
-                ? { tabsCriteria: { tabIds: [tabId] } }
-                : {}),
+    handleTool(async ({ documentId, tabId, items }) => {
+      const requests: docs_v1.Schema$Request[] =
+        items.map((item) => ({
+          replaceAllText: {
+            containsText: {
+              text: item.searchText,
+              matchCase: item.matchCase,
             },
-          }));
+            replaceText: item.replaceText,
+            ...(tabId
+              ? { tabsCriteria: { tabIds: [tabId] } }
+              : {}),
+          },
+        }));
 
-        requests = injectTabId(requests, tabId);
+      const replies = await sendBatchedRequests(
+        documentId,
+        injectTabId(requests, tabId),
+      );
 
-        const result = await docs.documents.batchUpdate({
-          documentId,
-          requestBody: { requests },
-        });
+      const totalChanged = replies.reduce((sum, r) => {
+        const changed =
+          r.replaceAllText?.occurrencesChanged ?? 0;
+        return sum + changed;
+      }, 0);
 
-        const totalChanged = (result.data.replies ?? [])
-          .reduce((sum, r) => {
-            const changed =
-              r.replaceAllText?.occurrencesChanged ?? 0;
-            return sum + changed;
-          }, 0);
-
-        return {
-          content: [{
-            type: "text",
-            text: `Выполнено ${items.length} замен, `
-              + `изменено ${totalChanged} вхождений`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      return textResult(
+        `Выполнено ${items.length} замен, `
+          + `изменено ${totalChanged} вхождений`,
+      );
+    }),
   );
 
   server.tool(
     "docs_replace_document_content",
-    "Replace entire document content with new text",
+    "Clear and replace entire document content. For partial edits use docs_insert_text or docs_delete_range",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
@@ -215,79 +178,65 @@ export function registerDocsWriteTools(
         "New document content",
       ),
     },
-    async ({ documentId, tabId, newContent }) => {
-      try {
-        const endIndex =
-          await getDocEndIndex(documentId, tabId);
-        const requests: docs_v1.Schema$Request[] = [];
+    handleTool(async ({ documentId, tabId, newContent }) => {
+      const endIndex =
+        await getDocEndIndex(documentId, tabId);
+      const requests: docs_v1.Schema$Request[] = [];
 
-        if (endIndex > 2) {
-          requests.push({
-            deleteContentRange: {
-              range: {
-                startIndex: 1,
-                endIndex: endIndex - 1,
-              },
-            },
-          });
-        }
-
+      if (endIndex > 2) {
         requests.push({
-          insertText: {
-            location: { index: 1 },
-            text: newContent,
+          deleteContentRange: {
+            range: {
+              startIndex: 1,
+              endIndex: endIndex - 1,
+            },
           },
         });
-
-        await sendBatchedRequests(
-          documentId, injectTabId(requests, tabId),
-        );
-
-        return {
-          content: [{
-            type: "text",
-            text: `Содержимое заменено `
-              + `(${newContent.length} символов)`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
       }
-    },
+
+      requests.push({
+        insertText: {
+          location: { index: 1 },
+          text: newContent,
+        },
+      });
+
+      await sendBatchedRequests(
+        documentId, injectTabId(requests, tabId),
+      );
+
+      return textResult(
+        `Содержимое заменено `
+          + `(${newContent.length} символов)`,
+      );
+    }),
   );
 
   server.tool(
     "docs_insert_page_break",
-    "Insert page breaks at one or multiple positions",
+    "Insert page break at index. Get index from docs_read_document (format: json)",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
       items: z.array(pageBreakItemSchema).min(1)
         .describe("Array of positions for page breaks"),
     },
-    async ({ documentId, tabId, items }) => {
-      try {
-        const requests: docs_v1.Schema$Request[] =
-          items.map((item) => ({
-            insertPageBreak: {
-              location: { index: item.index },
-            },
-          }));
+    handleTool(async ({ documentId, tabId, items }) => {
+      const requests: docs_v1.Schema$Request[] =
+        items.map((item) => ({
+          insertPageBreak: {
+            location: { index: item.index },
+          },
+        }));
 
-        await sendBatchedRequests(
-          documentId, injectTabId(requests, tabId),
-        );
+      await sendBatchedRequests(
+        documentId, injectTabId(requests, tabId),
+      );
 
-        return {
-          content: [{
-            type: "text",
-            text: `Вставлено ${items.length} `
-              + `разрывов страниц`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      return textResult(
+        `Вставлено ${items.length} `
+          + `разрывов страниц`,
+      );
+    }),
   );
 }

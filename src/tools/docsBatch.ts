@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { docs_v1 } from "googleapis";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { formatApiError } from "../utils/errors.js";
+import { textResult, handleTool } from "../utils/errors.js";
 import {
   sendBatchedRequests,
   tabIdParam,
@@ -167,9 +167,11 @@ export function registerDocsBatchTools(
 ): void {
   server.tool(
     "docs_batch_update",
-    "Batch multiple operations in one API call: "
-    + "text/paragraph styles, headings, inserts, deletes, "
-    + "tables, images. Avoids per-minute quota limits.",
+    "Execute multiple document operations in one request. "
+    + "Supports: insertText, deleteRange, insertTable, "
+    + "replaceAllText, updateTextStyle, updateParagraphStyle, "
+    + "insertInlineImage, insertPageBreak. Auto-chunks large "
+    + "batches",
     {
       documentId: z.string().describe("Document ID"),
       tabId: tabIdParam,
@@ -178,27 +180,20 @@ export function registerDocsBatchTools(
         .min(1)
         .describe("Array of operations to execute"),
     },
-    async ({ documentId, tabId, requests }) => {
-      try {
-        const apiRequests = requests.map(
-          (r) => mapRequest(r, tabId),
-        );
-        const sent = await sendBatchedRequests(
-          documentId,
-          injectTabId(apiRequests, tabId),
-        );
+    handleTool(async ({ documentId, tabId, requests }) => {
+      const apiRequests = requests.map(
+        (r) => mapRequest(r, tabId),
+      );
+      const replies = await sendBatchedRequests(
+        documentId,
+        injectTabId(apiRequests, tabId),
+      );
 
-        const chunks = Math.ceil(sent / 100);
-        return {
-          content: [{
-            type: "text",
-            text: `Выполнено ${requests.length} операций`
-              + ` в ${chunks} запросах`,
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      const chunks = Math.ceil(replies.length / 100);
+      return textResult(
+        `Выполнено ${requests.length} операций`
+          + ` в ${chunks} запросах`,
+      );
+    }),
   );
 }

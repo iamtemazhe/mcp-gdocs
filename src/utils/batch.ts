@@ -13,20 +13,22 @@ export const CHUNK_SIZE = 100;
 export async function sendBatchedRequests(
   documentId: string,
   requests: docs_v1.Schema$Request[],
-): Promise<number> {
+): Promise<docs_v1.Schema$Response[]> {
   const docs = await getDocsService();
-  let sent = 0;
+  const allReplies: docs_v1.Schema$Response[] = [];
 
-  for (let i = 0; i < requests.length; i += CHUNK_SIZE) {
+  for (
+    let i = 0; i < requests.length; i += CHUNK_SIZE
+  ) {
     const chunk = requests.slice(i, i + CHUNK_SIZE);
-    await docs.documents.batchUpdate({
+    const result = await docs.documents.batchUpdate({
       documentId,
       requestBody: { requests: chunk },
     });
-    sent += chunk.length;
+    allReplies.push(...(result.data.replies ?? []));
   }
 
-  return sent;
+  return allReplies;
 }
 
 type Obj = Record<string, unknown>;
@@ -72,6 +74,13 @@ export function injectTabId(
  * Возвращает endIndex последнего элемента body.
  * Если передан tabId — читает контент конкретного таба.
  */
+const END_INDEX_FIELDS = "body(content(endIndex))";
+const END_INDEX_FIELDS_TAB =
+  "tabs(tabProperties(tabId),"
+  + "childTabs(tabProperties(tabId),"
+  + "documentTab(body(content(endIndex)))),"
+  + "documentTab(body(content(endIndex))))";
+
 export async function getDocEndIndex(
   documentId: string,
   tabId?: string,
@@ -80,7 +89,12 @@ export async function getDocEndIndex(
 
   const doc = await docs.documents.get({
     documentId,
-    ...(tabId ? { includeTabsContent: true } : {}),
+    ...(tabId
+      ? {
+        includeTabsContent: true,
+        fields: END_INDEX_FIELDS_TAB,
+      }
+      : { fields: END_INDEX_FIELDS }),
   });
 
   const content = getBodyContent(doc.data, tabId);

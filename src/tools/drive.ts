@@ -2,12 +2,17 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { drive_v3 } from "googleapis";
 import { getDriveService } from "../auth.js";
-import { formatApiError, bulkResult } from "../utils/errors.js";
+import {
+  bulkResult,
+  handleTool,
+  jsonResult,
+} from "../utils/errors.js";
 
 export function registerDriveTools(server: McpServer): void {
   server.tool(
     "drive_list_documents",
-    "List Google Docs in a folder or by query",
+    "List recent Google Docs. Returns documentId, title, dates. "
+      + "Use documentId in other docs_* tools",
     {
       folderId: z.string().optional().describe(
         "Folder ID (optional)",
@@ -18,80 +23,63 @@ export function registerDriveTools(server: McpServer): void {
       pageSize: z.number().int().min(1).max(100).default(20)
         .describe("Max results per page"),
     },
-    async ({ folderId, query, pageSize }) => {
-      try {
-        const drive = await getDriveService();
+    handleTool(async ({ folderId, query, pageSize }) => {
+      const drive = await getDriveService();
 
-        const qParts: string[] = [
-          "mimeType='application/vnd.google-apps.document'",
-          "trashed=false",
-        ];
-        if (folderId) {
-          qParts.push(`'${folderId}' in parents`);
-        }
-        if (query) {
-          qParts.push(`name contains '${query}'`);
-        }
-
-        const result = await drive.files.list({
-          q: qParts.join(" and "),
-          pageSize,
-          fields: "files(id,name,modifiedTime,createdTime,"
-            + "owners,webViewLink)",
-          orderBy: "modifiedTime desc",
-        });
-
-        const files = result.data.files ?? [];
-        const items = files.map((f) => ({
-          id: f.id,
-          name: f.name,
-          modifiedTime: f.modifiedTime,
-          webViewLink: f.webViewLink,
-        }));
-
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(items, null, 2),
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
+      const qParts: string[] = [
+        "mimeType='application/vnd.google-apps.document'",
+        "trashed=false",
+      ];
+      if (folderId) {
+        qParts.push(`'${folderId}' in parents`);
       }
-    },
+      if (query) {
+        qParts.push(`name contains '${query}'`);
+      }
+
+      const result = await drive.files.list({
+        q: qParts.join(" and "),
+        pageSize,
+        fields: "files(id,name,modifiedTime,createdTime,"
+          + "owners,webViewLink)",
+        orderBy: "modifiedTime desc",
+      });
+
+      const files = result.data.files ?? [];
+      const items = files.map((f) => ({
+        id: f.id,
+        name: f.name,
+        modifiedTime: f.modifiedTime,
+        webViewLink: f.webViewLink,
+      }));
+
+      return jsonResult(items);
+    }),
   );
 
   server.tool(
     "drive_search_documents",
-    "Full-text search across Google Docs",
+    "Search Google Docs by content or name. "
+    + "Returns documentId, title, dates",
     {
       query: z.string().describe("Full-text search query"),
       pageSize: z.number().int().min(1).max(50).default(10)
         .describe("Max results per page"),
     },
-    async ({ query, pageSize }) => {
-      try {
-        const drive = await getDriveService();
-        const result = await drive.files.list({
-          q: `mimeType='application/vnd.google-apps.document' `
-            + `and fullText contains '${query}' `
-            + `and trashed=false`,
-          pageSize,
-          fields: "files(id,name,modifiedTime,webViewLink)",
-          orderBy: "modifiedTime desc",
-        });
+    handleTool(async ({ query, pageSize }) => {
+      const drive = await getDriveService();
+      const result = await drive.files.list({
+        q: `mimeType='application/vnd.google-apps.document' `
+          + `and fullText contains '${query}' `
+          + `and trashed=false`,
+        pageSize,
+        fields: "files(id,name,modifiedTime,webViewLink)",
+        orderBy: "modifiedTime desc",
+      });
 
-        const files = result.data.files ?? [];
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(files, null, 2),
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      const files = result.data.files ?? [];
+      return jsonResult(files);
+    }),
   );
 
   const createDocItemSchema = z.object({
@@ -103,12 +91,12 @@ export function registerDriveTools(server: McpServer): void {
 
   server.tool(
     "drive_create_document",
-    "Create one or multiple new empty Google Docs",
+    "Create new Google Docs. Returns documentId for use in other tools",
     {
       items: z.array(createDocItemSchema).min(1)
         .describe("Array of documents to create"),
     },
-    async ({ items }) => {
+    handleTool(async ({ items }) => {
       const drive = await getDriveService();
 
       const results = await Promise.allSettled(
@@ -139,7 +127,7 @@ export function registerDriveTools(server: McpServer): void {
       );
 
       return bulkResult(results);
-    },
+    }),
   );
 
   const copyItemSchema = z.object({
@@ -154,12 +142,12 @@ export function registerDriveTools(server: McpServer): void {
 
   server.tool(
     "drive_copy_file",
-    "Copy one or multiple files on Google Drive",
+    "Copy file to same or different folder. Returns new file ID",
     {
       items: z.array(copyItemSchema).min(1)
         .describe("Array of files to copy"),
     },
-    async ({ items }) => {
+    handleTool(async ({ items }) => {
       const drive = await getDriveService();
 
       const results = await Promise.allSettled(
@@ -179,7 +167,7 @@ export function registerDriveTools(server: McpServer): void {
       );
 
       return bulkResult(results);
-    },
+    }),
   );
 
   const moveItemSchema = z.object({
@@ -191,12 +179,12 @@ export function registerDriveTools(server: McpServer): void {
 
   server.tool(
     "drive_move_file",
-    "Move one or multiple files to another folder",
+    "Move file to different folder",
     {
       items: z.array(moveItemSchema).min(1)
         .describe("Array of files to move"),
     },
-    async ({ items }) => {
+    handleTool(async ({ items }) => {
       const drive = await getDriveService();
 
       const results = await Promise.allSettled(
@@ -223,7 +211,7 @@ export function registerDriveTools(server: McpServer): void {
       );
 
       return bulkResult(results);
-    },
+    }),
   );
 
   const deleteItemSchema = z.object({
@@ -232,12 +220,12 @@ export function registerDriveTools(server: McpServer): void {
 
   server.tool(
     "drive_delete_file",
-    "Delete one or multiple files (move to trash)",
+    "Move file to trash",
     {
       items: z.array(deleteItemSchema).min(1)
         .describe("Array of files to delete"),
     },
-    async ({ items }) => {
+    handleTool(async ({ items }) => {
       const drive = await getDriveService();
 
       const results = await Promise.allSettled(
@@ -251,7 +239,7 @@ export function registerDriveTools(server: McpServer): void {
       );
 
       return bulkResult(results);
-    },
+    }),
   );
 
   const createFolderItemSchema = z.object({
@@ -263,12 +251,12 @@ export function registerDriveTools(server: McpServer): void {
 
   server.tool(
     "drive_create_folder",
-    "Create one or multiple folders on Google Drive",
+    "Create folder in Google Drive",
     {
       items: z.array(createFolderItemSchema).min(1)
         .describe("Array of folders to create"),
     },
-    async ({ items }) => {
+    handleTool(async ({ items }) => {
       const drive = await getDriveService();
 
       const results = await Promise.allSettled(
@@ -288,40 +276,30 @@ export function registerDriveTools(server: McpServer): void {
       );
 
       return bulkResult(results);
-    },
+    }),
   );
 
   server.tool(
     "drive_list_folder_contents",
-    "List folder contents on Google Drive",
+    "List folder contents. Get folderId from drive_search_documents "
+      + "or drive_get_folder_info",
     {
       folderId: z.string().describe("Folder ID"),
       pageSize: z.number().int().min(1).max(100).default(50)
         .describe("Max results per page"),
     },
-    async ({ folderId, pageSize }) => {
-      try {
-        const drive = await getDriveService();
-        const result = await drive.files.list({
-          q: `'${folderId}' in parents and trashed=false`,
-          pageSize,
-          fields: "files(id,name,mimeType,modifiedTime,"
-            + "webViewLink)",
-          orderBy: "name",
-        });
+    handleTool(async ({ folderId, pageSize }) => {
+      const drive = await getDriveService();
+      const result = await drive.files.list({
+        q: `'${folderId}' in parents and trashed=false`,
+        pageSize,
+        fields: "files(id,name,mimeType,modifiedTime,"
+          + "webViewLink)",
+        orderBy: "name",
+      });
 
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(
-              result.data.files ?? [], null, 2,
-            ),
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      return jsonResult(result.data.files ?? []);
+    }),
   );
 
   const templateItemSchema = z.object({
@@ -338,12 +316,13 @@ export function registerDriveTools(server: McpServer): void {
 
   server.tool(
     "drive_create_from_template",
-    "Create one or more documents from a template (copy)",
+    "Create document from template by copying and optionally replacing "
+      + "placeholders",
     {
       items: z.array(templateItemSchema).min(1)
         .describe("Array of documents to create"),
     },
-    async ({ items }) => {
+    handleTool(async ({ items }) => {
       const drive = await getDriveService();
 
       const results = await Promise.allSettled(
@@ -372,35 +351,26 @@ export function registerDriveTools(server: McpServer): void {
       );
 
       return bulkResult(results);
-    },
+    }),
   );
 
   server.tool(
     "drive_get_folder_info",
-    "Get folder metadata from Google Drive",
+    "Get folder metadata: name, parent, dates",
     {
       folderId: z.string().describe("Folder ID"),
     },
-    async ({ folderId }) => {
-      try {
-        const drive = await getDriveService();
-        const result = await drive.files.get({
-          fileId: folderId,
-          fields: "id,name,mimeType,createdTime,"
-            + "modifiedTime,parents,webViewLink,"
-            + "owners(displayName,emailAddress),shared",
-        });
+    handleTool(async ({ folderId }) => {
+      const drive = await getDriveService();
+      const result = await drive.files.get({
+        fileId: folderId,
+        fields: "id,name,mimeType,createdTime,"
+          + "modifiedTime,parents,webViewLink,"
+          + "owners(displayName,emailAddress),shared",
+      });
 
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(result.data, null, 2),
-          }],
-        };
-      } catch (error) {
-        return formatApiError(error);
-      }
-    },
+      return jsonResult(result.data);
+    }),
   );
 
   const renameItemSchema = z.object({
@@ -410,12 +380,12 @@ export function registerDriveTools(server: McpServer): void {
 
   server.tool(
     "drive_rename_file",
-    "Rename one or multiple files on Google Drive",
+    "Rename file or folder in Google Drive",
     {
       items: z.array(renameItemSchema).min(1)
         .describe("Array of files to rename"),
     },
-    async ({ items }) => {
+    handleTool(async ({ items }) => {
       const drive = await getDriveService();
 
       const results = await Promise.allSettled(
@@ -430,6 +400,6 @@ export function registerDriveTools(server: McpServer): void {
       );
 
       return bulkResult(results);
-    },
+    }),
   );
 }

@@ -98,8 +98,12 @@ export function buildTableCellStyleRequest(
 // ── Text Style ─────────────────────────────────────────────────────
 
 export const textStyleItemSchema = z.object({
-  startIndex: z.number().int().min(1),
-  endIndex: z.number().int().min(2),
+  startIndex: z.number().int().min(1).describe(
+    "Start index from docs_read_document (json)",
+  ),
+  endIndex: z.number().int().min(2).describe(
+    "End index from docs_read_document (json)",
+  ),
   bold: z.boolean().optional(),
   italic: z.boolean().optional(),
   underline: z.boolean().optional(),
@@ -122,8 +126,12 @@ export type TextStyleItem =
   z.infer<typeof textStyleItemSchema>;
 
 export const paragraphStyleItemSchema = z.object({
-  startIndex: z.number().int().min(1),
-  endIndex: z.number().int().min(2),
+  startIndex: z.number().int().min(1).describe(
+    "Start index from docs_read_document (json)",
+  ),
+  endIndex: z.number().int().min(2).describe(
+    "End index from docs_read_document (json)",
+  ),
   alignment: z
     .enum(["START", "CENTER", "END", "JUSTIFIED"])
     .optional()
@@ -152,8 +160,12 @@ export type ParagraphStyleItem =
   z.infer<typeof paragraphStyleItemSchema>;
 
 export const headingStyleItemSchema = z.object({
-  startIndex: z.number().int().min(1),
-  endIndex: z.number().int().min(2),
+  startIndex: z.number().int().min(1).describe(
+    "Start index from docs_read_document (json)",
+  ),
+  endIndex: z.number().int().min(2).describe(
+    "End index from docs_read_document (json)",
+  ),
   headingStyle: z
     .enum([
       "NORMAL_TEXT",

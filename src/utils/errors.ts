@@ -1,6 +1,35 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { GaxiosError } from "googleapis-common";
 
+export function textResult(
+  msg: string,
+): CallToolResult {
+  return { content: [{ type: "text", text: msg }] };
+}
+
+export function jsonResult(
+  data: unknown,
+): CallToolResult {
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify(data, null, 2),
+    }],
+  };
+}
+
+export function handleTool<T>(
+  fn: (args: T) => Promise<CallToolResult>,
+): (args: T) => Promise<CallToolResult> {
+  return async (args: T) => {
+    try {
+      return await fn(args);
+    } catch (error) {
+      return formatApiError(error);
+    }
+  };
+}
+
 interface BulkItem {
   index: number;
   status: "ok" | "error";
