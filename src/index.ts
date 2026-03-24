@@ -18,6 +18,7 @@ import { registerDocsImageTools } from "./tools/docsImages.js";
 import { registerDocsMarkdownTools } from "./tools/docsMarkdown.js";
 import { registerDocsCommentTools } from "./tools/docsComments.js";
 import { registerDocsBatchTools } from "./tools/docsBatch.js";
+import { registerDocsFormatByTextTools } from "./tools/docsFormatByText.js";
 import { registerDriveTools } from "./tools/drive.js";
 
 // ── Auth CLI subcommand ────────────────────────────────────────────
@@ -45,6 +46,7 @@ const server = new McpServer(
   },
   {
     capabilities: {
+      tools: { listChanged: true },
       logging: {},
     },
   },
@@ -58,6 +60,7 @@ registerDocsImageTools(server);
 registerDocsMarkdownTools(server);
 registerDocsCommentTools(server);
 registerDocsBatchTools(server);
+registerDocsFormatByTextTools(server);
 registerDriveTools(server);
 
 async function main(): Promise<void> {

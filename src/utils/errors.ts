@@ -1,20 +1,42 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { GaxiosError } from "googleapis-common";
+import { logger } from "./logger.js";
+
+const MAX_RESPONSE =
+  parseInt(
+    process.env.GDOCS_MAX_RESPONSE_LENGTH ?? "0",
+    10,
+  ) || 0;
+
+const PRETTY_JSON =
+  process.env.MCP_PRETTY_JSON === "true";
+
+function truncate(text: string): string {
+  if (!MAX_RESPONSE || text.length <= MAX_RESPONSE) {
+    return text;
+  }
+  const full = text.length;
+  return text.slice(0, MAX_RESPONSE)
+    + `\n\n[Truncated at ${MAX_RESPONSE}`
+    + ` of ${full} chars]`;
+}
 
 export function textResult(
   msg: string,
 ): CallToolResult {
-  return { content: [{ type: "text", text: msg }] };
+  return {
+    content: [{ type: "text", text: truncate(msg) }],
+  };
 }
 
 export function jsonResult(
   data: unknown,
 ): CallToolResult {
+  const raw = PRETTY_JSON
+    ? JSON.stringify(data, null, 2)
+    : JSON.stringify(data);
   return {
-    content: [{
-      type: "text",
-      text: JSON.stringify(data, null, 2),
-    }],
+    content: [{ type: "text", text: truncate(raw) }],
   };
 }
 
@@ -30,37 +52,36 @@ export function handleTool<T>(
   };
 }
 
-interface BulkItem {
-  index: number;
-  status: "ok" | "error";
-  result?: unknown;
-  error?: string;
-}
-
 export function bulkResult(
   settled: PromiseSettledResult<unknown>[],
 ): CallToolResult {
-  const items: BulkItem[] = settled.map((s, i) => {
+  const errors: { index: number; error: string }[] = [];
+  let ok = 0;
+
+  settled.forEach((s, i) => {
     if (s.status === "fulfilled") {
-      return { index: i, status: "ok", result: s.value };
+      ok++;
+    } else {
+      const msg = s.reason instanceof Error
+        ? s.reason.message
+        : String(s.reason);
+      errors.push({ index: i, error: msg });
     }
-    const msg = s.reason instanceof Error
-      ? s.reason.message
-      : String(s.reason);
-    return { index: i, status: "error", error: msg };
   });
 
-  const ok = items.filter((i) => i.status === "ok").length;
-  const failed = items.length - ok;
-  const summary = `Выполнено ${ok}/${items.length}`
-    + (failed > 0 ? `, ошибок: ${failed}` : "");
+  const total = settled.length;
+  const summary = `Done ${ok}/${total}`
+    + (errors.length > 0
+      ? `, errors: ${errors.length}`
+      : "");
+
+  const text = errors.length > 0
+    ? `${summary}\n${JSON.stringify(errors)}`
+    : summary;
 
   return {
-    content: [{
-      type: "text",
-      text: `${summary}\n${JSON.stringify(items, null, 2)}`,
-    }],
-    isError: failed === items.length,
+    content: [{ type: "text", text }],
+    isError: ok === 0 && total > 0,
   };
 }
 
@@ -74,12 +95,20 @@ export function formatApiError(error: unknown): CallToolResult {
     let hint = "";
 
     if (status === 401 || status === 403) {
-      hint = ". Проверьте права service account на документ";
+      hint = ". Check service account permissions "
+        + "on the document (Share → Add email)";
     } else if (status === 404) {
-      hint = ". Документ не найден или нет доступа";
+      hint = ". Document not found or no access. "
+        + "Verify documentId via drive_list_documents "
+        + "or drive_search_documents";
     } else if (status === 429) {
-      hint = ". Превышен лимит запросов, повторите позже";
+      hint = ". Rate limit exceeded, retry in a moment";
     }
+
+    logger.error(`${prefix}: ${message}`, {
+      status,
+      url: error.config?.url,
+    });
 
     return {
       content: [
@@ -89,21 +118,43 @@ export function formatApiError(error: unknown): CallToolResult {
     };
   }
 
-  if (error instanceof Error) {
-    return {
-      content: [
-        { type: "text", text: `Ошибка: ${error.message}` },
-      ],
-      isError: true,
-    };
-  }
+  const msg = error instanceof Error
+    ? error.message
+    : String(error);
+
+  logger.error(msg);
 
   return {
     content: [
-      { type: "text", text: `Неизвестная ошибка: ${String(error)}` },
+      { type: "text", text: `Error: ${msg}` },
     ],
     isError: true,
   };
+}
+
+export function stripEmpty(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return undefined;
+  if (Array.isArray(obj)) {
+    const arr = obj
+      .map(stripEmpty)
+      .filter((v) => v !== undefined);
+    return arr.length > 0 ? arr : undefined;
+  }
+  if (typeof obj === "object") {
+    const result: Record<string, unknown> = {};
+    let hasKeys = false;
+    for (const [k, v] of Object.entries(
+      obj as Record<string, unknown>,
+    )) {
+      const cleaned = stripEmpty(v);
+      if (cleaned !== undefined) {
+        result[k] = cleaned;
+        hasKeys = true;
+      }
+    }
+    return hasKeys ? result : undefined;
+  }
+  return obj;
 }
 
 function isGaxiosError(error: unknown): error is GaxiosError {

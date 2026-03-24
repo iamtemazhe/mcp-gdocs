@@ -104,10 +104,18 @@ export const textStyleItemSchema = z.object({
   endIndex: z.number().int().min(2).describe(
     "End index from docs_read_document (json)",
   ),
-  bold: z.boolean().optional(),
-  italic: z.boolean().optional(),
-  underline: z.boolean().optional(),
-  strikethrough: z.boolean().optional(),
+  bold: z.boolean().optional().describe(
+    "Omit to leave unchanged",
+  ),
+  italic: z.boolean().optional().describe(
+    "Omit to leave unchanged",
+  ),
+  underline: z.boolean().optional().describe(
+    "Omit to leave unchanged",
+  ),
+  strikethrough: z.boolean().optional().describe(
+    "Omit to leave unchanged",
+  ),
   fontSize: z.number().optional().describe(
     "Font size in pt",
   ),
@@ -181,6 +189,39 @@ export const headingStyleItemSchema = z.object({
 
 export type HeadingStyleItem =
   z.infer<typeof headingStyleItemSchema>;
+
+const INDEX_FROM_JSON =
+  "Get from docs_read_document (format: json)";
+
+export const indexedTextStyleSchema =
+  textStyleItemSchema.extend({
+    startIndex: z.number().int().min(1).describe(
+      INDEX_FROM_JSON,
+    ),
+    endIndex: z.number().int().min(2).describe(
+      INDEX_FROM_JSON,
+    ),
+  });
+
+export const indexedParagraphStyleSchema =
+  paragraphStyleItemSchema.extend({
+    startIndex: z.number().int().min(1).describe(
+      INDEX_FROM_JSON,
+    ),
+    endIndex: z.number().int().min(2).describe(
+      INDEX_FROM_JSON,
+    ),
+  });
+
+export const indexedHeadingStyleSchema =
+  headingStyleItemSchema.extend({
+    startIndex: z.number().int().min(1).describe(
+      INDEX_FROM_JSON,
+    ),
+    endIndex: z.number().int().min(2).describe(
+      INDEX_FROM_JSON,
+    ),
+  });
 
 export function buildTextStyle(
   item: TextStyleItem,

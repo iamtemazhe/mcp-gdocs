@@ -4,13 +4,14 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { textResult, handleTool } from "../utils/errors.js";
 import {
   sendBatchedRequests,
+  CHUNK_SIZE,
   tabIdParam,
   injectTabId,
 } from "../utils/batch.js";
 import {
-  textStyleItemSchema,
-  paragraphStyleItemSchema,
-  headingStyleItemSchema,
+  indexedTextStyleSchema,
+  indexedParagraphStyleSchema,
+  indexedHeadingStyleSchema,
   imageItemSchema,
   tableCellStyleItemSchema,
   buildTextStyleRequest,
@@ -20,49 +21,51 @@ import {
   buildTableCellStyleRequest,
 } from "../utils/styleBuilders.js";
 
-const updateTextStyleSchema = textStyleItemSchema.extend({
-  type: z.literal("updateTextStyle"),
-});
+const updateTextStyleSchema =
+  indexedTextStyleSchema.extend({
+    type: z.literal("updateTextStyle"),
+  });
 
 const updateParagraphStyleSchema =
-  paragraphStyleItemSchema.extend({
+  indexedParagraphStyleSchema.extend({
     type: z.literal("updateParagraphStyle"),
   });
 
 const updateHeadingStyleSchema =
-  headingStyleItemSchema.extend({
+  indexedHeadingStyleSchema.extend({
     type: z.literal("updateHeadingStyle"),
   });
 
 const insertTextSchema = z.object({
   type: z.literal("insertText"),
-  index: z.number().int().min(1),
-  text: z.string(),
+  index: z.number().int().min(1).describe("Insert index"),
+  text: z.string().describe("Text to insert"),
 });
 
 const deleteContentRangeSchema = z.object({
   type: z.literal("deleteContentRange"),
-  startIndex: z.number().int().min(1),
-  endIndex: z.number().int().min(2),
+  startIndex: z.number().int().min(1).describe("Range start"),
+  endIndex: z.number().int().min(2).describe("Range end"),
 });
 
 const replaceAllTextSchema = z.object({
   type: z.literal("replaceAllText"),
-  searchText: z.string(),
-  replaceText: z.string(),
-  matchCase: z.boolean().default(true),
+  searchText: z.string().describe("Search string"),
+  replaceText: z.string().describe("Replace string"),
+  matchCase: z.boolean().default(true)
+    .describe("Case-sensitive match"),
 });
 
 const insertPageBreakSchema = z.object({
   type: z.literal("insertPageBreak"),
-  index: z.number().int().min(1),
+  index: z.number().int().min(1).describe("Break index"),
 });
 
 const insertTableSchema = z.object({
   type: z.literal("insertTable"),
-  index: z.number().int().min(1),
-  rows: z.number().int().min(1),
-  columns: z.number().int().min(1),
+  index: z.number().int().min(1).describe("Table index"),
+  rows: z.number().int().min(1).describe("Row count"),
+  columns: z.number().int().min(1).describe("Column count"),
 });
 
 const insertInlineImageSchema = imageItemSchema.extend({
@@ -72,7 +75,9 @@ const insertInlineImageSchema = imageItemSchema.extend({
 const updateTableCellStyleSchema =
   tableCellStyleItemSchema.extend({
     type: z.literal("updateTableCellStyle"),
-    tableStartIndex: z.number().int(),
+    tableStartIndex: z.number().int().describe(
+      "From docs_read_document format:json",
+    ),
   });
 
 const batchRequestSchema = z.discriminatedUnion("type", [
@@ -165,20 +170,26 @@ function mapRequest(
 export function registerDocsBatchTools(
   server: McpServer,
 ): void {
-  server.tool(
+  server.registerTool(
     "docs_batch_update",
-    "Execute multiple document operations in one request. "
-    + "Supports: insertText, deleteRange, insertTable, "
-    + "replaceAllText, updateTextStyle, updateParagraphStyle, "
-    + "insertInlineImage, insertPageBreak. Auto-chunks large "
-    + "batches",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      requests: z
-        .array(batchRequestSchema)
-        .min(1)
-        .describe("Array of operations to execute"),
+      title: "Batch Update",
+      description:
+        "Batch: updateTextStyle, updateParagraphStyle, updateHeadingStyle, insertText, deleteContentRange, replaceAllText; +4",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        requests: z
+          .array(batchRequestSchema)
+          .min(1)
+          .describe("Batch operations"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ documentId, tabId, requests }) => {
       const apiRequests = requests.map(
@@ -189,10 +200,9 @@ export function registerDocsBatchTools(
         injectTabId(apiRequests, tabId),
       );
 
-      const chunks = Math.ceil(replies.length / 100);
+      const chunks = Math.ceil(replies.length / CHUNK_SIZE);
       return textResult(
-        `Выполнено ${requests.length} операций`
-          + ` в ${chunks} запросах`,
+        `${requests.length} op(s) in ${chunks} request(s)`,
       );
     }),
   );

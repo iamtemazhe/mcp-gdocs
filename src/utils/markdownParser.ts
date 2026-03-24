@@ -171,6 +171,19 @@ function processInlineTokens(
         );
         break;
       }
+      case "image": {
+        const t = token as Tokens.Image;
+        if (t.href) {
+          state.requests.push({
+            insertInlineImage: {
+              uri: t.href,
+              location: { index: state.index },
+            },
+          });
+          state.index += 1;
+        }
+        break;
+      }
       case "br": {
         insertTextReq(state, "\n");
         break;

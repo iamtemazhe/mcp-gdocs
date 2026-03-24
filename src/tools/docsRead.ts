@@ -2,38 +2,61 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDocsService } from "../auth.js";
 import { docToPlainText, docToMarkdown } from "../utils/docReader.js";
-import { textResult, jsonResult, handleTool } from "../utils/errors.js";
+import {
+  textResult, jsonResult, stripEmpty, handleTool,
+} from "../utils/errors.js";
 import { tabIdParam } from "../utils/batch.js";
 import { findTab } from "../utils/tabs.js";
 
 export function registerDocsReadTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "docs_read_document",
-    "Read document content. Use format: json to get element indices for "
-      + "other tools (insert, style, table operations)",
     {
-      documentId: z.string().describe("Google Docs document ID"),
-      tabId: tabIdParam,
-      format: z
-        .enum(["text", "json", "markdown"])
-        .default("text")
-        .describe(
-          "text = plain body; json = structure with startIndex/endIndex "
-            + "for insert/style/table tools; markdown = rendered markdown",
-        ),
+      title: "Read Document",
+      description:
+        "Read body as text, json (indices), or markdown.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        format: z
+          .enum(["text", "json", "markdown"])
+          .default("text")
+          .describe("Output format"),
+        maxLength: z.number().int().min(1).optional()
+          .describe("Max response length"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: true,
+      },
     },
-    handleTool(async ({ documentId, tabId, format }) => {
+    handleTool(async ({
+      documentId, tabId, format, maxLength,
+    }) => {
       const docs = await getDocsService();
+
+      const textFields =
+        "body(content(paragraph(elements("
+        + "textRun(content),startIndex,endIndex))))";
+
       const doc = await docs.documents.get({
         documentId,
         ...(tabId ? { includeTabsContent: true } : {}),
+        ...(format === "text"
+          ? { fields: `documentId,title,${textFields}` }
+          : {}),
       });
 
       let docData = doc.data;
       if (tabId) {
         const tab = findTab(doc.data, tabId);
         if (!tab?.documentTab) {
-          throw new Error(`Tab "${tabId}" not found`);
+          throw new Error(
+            `Tab "${tabId}" not found. `
+            + "Use docs_list_document_tabs to list valid tab IDs",
+          );
         }
         docData = {
           ...doc.data,
@@ -41,23 +64,40 @@ export function registerDocsReadTools(server: McpServer): void {
         };
       }
 
-      switch (format) {
-        case "json":
-          return jsonResult(docData);
-        case "markdown":
-          return textResult(docToMarkdown(docData));
-        default:
-          return textResult(docToPlainText(docData));
+      if (format === "json") {
+        return jsonResult(stripEmpty(docData));
       }
+
+      let result = format === "markdown"
+        ? docToMarkdown(docData)
+        : docToPlainText(docData);
+
+      if (maxLength && result.length > maxLength) {
+        const fullLength = result.length;
+        result = result.slice(0, maxLength)
+          + `\n\n[Truncated at ${maxLength}`
+          + ` of ${fullLength} chars]`;
+      }
+
+      return textResult(result);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_get_document_info",
-    "Get document metadata: title, locale, revision. "
-      + "Use docs_read_document for content",
     {
-      documentId: z.string().describe("Google Docs document ID"),
+      title: "Get Document Info",
+      description:
+        "Metadata: title, revisionId, body size.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: true,
+      },
     },
     handleTool(async ({ documentId }) => {
       const docs = await getDocsService();
@@ -79,11 +119,20 @@ export function registerDocsReadTools(server: McpServer): void {
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_list_document_tabs",
-    "List all tabs in a multi-tab document",
     {
-      documentId: z.string().describe("Google Docs document ID"),
+      title: "List Document Tabs",
+      description: "List tab id and title per tab.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: true,
+      },
     },
     handleTool(async ({ documentId }) => {
       const docs = await getDocsService();

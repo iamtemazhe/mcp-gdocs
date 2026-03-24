@@ -1,11 +1,9 @@
 node_modules/
-dist/
+build/
 *.js.map
-credentials.json
-*.json.bak
-tests/*.sh
-tests/run-all.sh
-tests/.env
-tests/integration/
 .env
 .DS_Store
+TODO.md
+tests/
+credentials.json
+*.json.bak

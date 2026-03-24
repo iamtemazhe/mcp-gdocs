@@ -15,32 +15,32 @@ import {
 import { getBodyContent } from "../utils/tabs.js";
 
 const cellContentItemSchema = z.object({
-  rowIndex: z.number().int().min(0).describe("Row index"),
-  columnIndex: z.number().int().min(0).describe(
-    "Column index",
-  ),
-  newContent: z.string().describe("New cell content"),
+  rowIndex: z.number().int().min(0).describe("Row (0-based)"),
+  columnIndex: z.number().int().min(0).describe("Column (0-based)"),
+  newContent: z.string().describe("Cell text"),
 });
 
 export function registerDocsTableTools(
   server: McpServer,
 ): void {
-  server.tool(
+  server.registerTool(
     "docs_insert_table",
-    "Insert table at index. Get index from docs_read_document "
-      + "(format: json)",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      rows: z.number().int().min(1).describe(
-        "Number of rows",
-      ),
-      columns: z.number().int().min(1).describe(
-        "Number of columns",
-      ),
-      index: z.number().int().min(1).describe(
-        "Insert position",
-      ),
+      title: "Insert Table",
+      description: "Insert empty table at index.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        rows: z.number().int().min(1).describe("Row count"),
+        columns: z.number().int().min(1).describe("Column count"),
+        index: z.number().int().min(1).describe("Insert index"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({
       documentId, tabId, rows, columns, index,
@@ -55,30 +55,32 @@ export function registerDocsTableTools(
 
       await sendBatchedRequests(documentId, reqs);
       return textResult(
-        `Таблица ${rows}x${columns} вставлена `
-          + `на позицию ${index}`,
+        `Table ${rows}x${columns} at index ${index}`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_insert_table_row",
-    "Insert rows into table. Get tableStartIndex from "
-      + "docs_read_document (format: json)",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      tableStartIndex: z.number().int().describe(
-        "Table start index in the document",
-      ),
-      rowIndex: z.number().int().min(0).describe(
-        "Row index to insert after",
-      ),
-      columnIndex: z.number().int().min(0).default(0)
-        .describe("Reference cell column index"),
-      insertBelow: z.boolean().default(true).describe(
-        "Insert below (true) or above (false)",
-      ),
+      title: "Insert Table Row",
+      description:
+        "Insert row via table cell anchor.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        rowIndex: z.number().int().min(0).describe("Anchor row"),
+        columnIndex: z.number().int().min(0).default(0)
+          .describe("Anchor column"),
+        insertBelow: z.boolean().default(true).describe("Below if true"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async (params) => {
       const reqs = injectTabId([{
@@ -98,31 +100,32 @@ export function registerDocsTableTools(
         params.documentId, reqs,
       );
       return textResult(
-        `Строка вставлена `
-          + `(row=${params.rowIndex}, `
-          + `below=${params.insertBelow})`,
+        `Row inserted (row=${params.rowIndex}, below=${params.insertBelow})`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_insert_table_column",
-    "Insert columns into table. Get tableStartIndex from "
-      + "docs_read_document (format: json)",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      tableStartIndex: z.number().int().describe(
-        "Table start index",
-      ),
-      rowIndex: z.number().int().min(0).default(0)
-        .describe("Reference row index"),
-      columnIndex: z.number().int().min(0).describe(
-        "Column index to insert next to",
-      ),
-      insertRight: z.boolean().default(true).describe(
-        "Insert right (true) or left (false)",
-      ),
+      title: "Insert Table Column",
+      description:
+        "Insert column via cell anchor.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        rowIndex: z.number().int().min(0).default(0)
+          .describe("Anchor row"),
+        columnIndex: z.number().int().min(0).describe("Anchor column"),
+        insertRight: z.boolean().default(true).describe("Right if true"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async (params) => {
       const reqs = injectTabId([{
@@ -142,27 +145,31 @@ export function registerDocsTableTools(
         params.documentId, reqs,
       );
       return textResult(
-        `Столбец вставлен рядом с `
-          + `column=${params.columnIndex}`,
+        `Column inserted near column=${params.columnIndex}`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_delete_table_row",
-    "Delete rows from table. Get tableStartIndex from "
-      + "docs_read_document (format: json)",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      tableStartIndex: z.number().int().describe(
-        "Table start index",
-      ),
-      rowIndex: z.number().int().min(0).describe(
-        "Row index to delete",
-      ),
-      columnIndex: z.number().int().min(0).default(0)
-        .describe("Reference column index"),
+      title: "Delete Table Row",
+      description:
+        "Delete one row by cell context.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        rowIndex: z.number().int().min(0).describe("Row to delete"),
+        columnIndex: z.number().int().min(0).default(0)
+          .describe("Anchor column"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async (params) => {
       const reqs = injectTabId([{
@@ -181,26 +188,31 @@ export function registerDocsTableTools(
         params.documentId, reqs,
       );
       return textResult(
-        `Строка ${params.rowIndex} удалена`,
+        `Row ${params.rowIndex} deleted`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_delete_table_column",
-    "Delete columns from table. Get tableStartIndex from "
-      + "docs_read_document (format: json)",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      tableStartIndex: z.number().int().describe(
-        "Table start index",
-      ),
-      rowIndex: z.number().int().min(0).default(0)
-        .describe("Reference row index"),
-      columnIndex: z.number().int().min(0).describe(
-        "Column index to delete",
-      ),
+      title: "Delete Table Column",
+      description:
+        "Delete one column by index.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        rowIndex: z.number().int().min(0).default(0)
+          .describe("Anchor row"),
+        columnIndex: z.number().int().min(0).describe("Column to delete"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async (params) => {
       const reqs = injectTabId([{
@@ -219,24 +231,30 @@ export function registerDocsTableTools(
         params.documentId, reqs,
       );
       return textResult(
-        `Столбец ${params.columnIndex} удалён`,
+        `Column ${params.columnIndex} deleted`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_update_table_cell_content",
-    "Replace table cell content. Get tableStartIndex from "
-      + "docs_read_document (format: json). Rows/columns are "
-      + "0-indexed",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      tableStartIndex: z.number().int().describe(
-        "Table start index",
-      ),
-      items: z.array(cellContentItemSchema).min(1)
-        .describe("Array of cells to update"),
+      title: "Update Table Cell Content",
+      description:
+        "Bulk set cell text (0-based indices).",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        items: z.array(cellContentItemSchema).min(1)
+          .describe("Cells to update"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({
       documentId, tabId, tableStartIndex, items,
@@ -308,23 +326,30 @@ export function registerDocsTableTools(
       }
 
       return textResult(
-        `Обновлено ${items.length} ячеек`,
+        `Updated ${items.length} cell(s)`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_update_table_cell_style",
-    "Style table cells (background color). Get tableStartIndex "
-      + "from docs_read_document (format: json)",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      tableStartIndex: z.number().int().describe(
-        "Table start index",
-      ),
-      items: z.array(tableCellStyleItemSchema).min(1)
-        .describe("Array of cells to style"),
+      title: "Update Table Cell Style",
+      description:
+        "Bulk cell background color.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        items: z.array(tableCellStyleItemSchema).min(1)
+          .describe("Cells to style"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({
       documentId, tabId, tableStartIndex, items,
@@ -340,8 +365,77 @@ export function registerDocsTableTools(
       );
 
       return textResult(
-        `Стиль применён к `
-          + `${items.length} ячейкам`,
+        `Style applied to ${items.length} cell(s)`,
+      );
+    }),
+  );
+
+  server.registerTool(
+    "docs_insert_table_with_data",
+    {
+      title: "Insert Table With Data",
+      description:
+        "Insert table and fill cells at index.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        index: z.number().int().min(1).describe("Insert index"),
+        headers: z.array(z.string()).optional().describe("Header row"),
+        rows: z.array(z.array(z.string())).min(1).describe("Data rows"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
+    },
+    handleTool(async ({
+      documentId, tabId, index, headers, rows,
+    }) => {
+      const allRows = headers ? [headers, ...rows] : rows;
+      const numRows = allRows.length;
+      const numCols = Math.max(
+        ...allRows.map((r) => r.length),
+      );
+
+      if (numCols === 0) {
+        throw new Error("Rows must not be empty");
+      }
+
+      const insertReqs = injectTabId([{
+        insertTable: {
+          rows: numRows,
+          columns: numCols,
+          location: { index },
+        },
+      }], tabId);
+      await sendBatchedRequests(documentId, insertReqs);
+
+      const fillReqs: docs_v1.Schema$Request[] = [];
+      for (let r = numRows - 1; r >= 0; r--) {
+        for (let c = numCols - 1; c >= 0; c--) {
+          const text = allRows[r]?.[c] ?? "";
+          if (!text) continue;
+          const cellIdx = index + 4
+            + r * (1 + numCols * 2) + c * 2;
+          fillReqs.push({
+            insertText: {
+              location: { index: cellIdx },
+              text,
+            },
+          });
+        }
+      }
+
+      if (fillReqs.length > 0) {
+        await sendBatchedRequests(
+          documentId, injectTabId(fillReqs, tabId),
+        );
+      }
+
+      return textResult(
+        `Table ${numRows}x${numCols} inserted at ${index}`,
       );
     }),
   );
@@ -363,7 +457,9 @@ function findTable(
     }
   }
   throw new Error(
-    `Table not found at index ${tableStartIndex}`,
+    `Table not found at index ${tableStartIndex}. `
+    + "Use docs_read_document(format:json) to find "
+    + "tableStartIndex values",
   );
 }
 

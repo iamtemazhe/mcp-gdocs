@@ -8,7 +8,7 @@ export const tabIdParam = z.string().optional().describe(
   + "(use docs_list_document_tabs to find)",
 );
 
-export const CHUNK_SIZE = 100;
+export const CHUNK_SIZE = 500;
 
 export async function sendBatchedRequests(
   documentId: string,
@@ -71,9 +71,18 @@ export function injectTabId(
 }
 
 /**
- * Возвращает endIndex последнего элемента body.
- * Если передан tabId — читает контент конкретного таба.
+ * Индексы body документа после одного запроса к API.
  */
+export type DocIndices = {
+  /** endIndex последнего элемента body. */
+  endIndex: number;
+  /**
+   * endIndex после первого блока content[1] (для preserveTitle).
+   * Если блоков меньше двух — 1.
+   */
+  firstParagraphEnd: number;
+};
+
 const END_INDEX_FIELDS = "body(content(endIndex))";
 const END_INDEX_FIELDS_TAB =
   "tabs(tabProperties(tabId),"
@@ -81,10 +90,14 @@ const END_INDEX_FIELDS_TAB =
   + "documentTab(body(content(endIndex)))),"
   + "documentTab(body(content(endIndex))))";
 
-export async function getDocEndIndex(
+/**
+ * Один fetch документа: endIndex конца body и граница «первого абзаца».
+ * Если передан tabId — читает контент конкретного таба.
+ */
+export async function fetchDocIndices(
   documentId: string,
   tabId?: string,
-): Promise<number> {
+): Promise<DocIndices> {
   const docs = await getDocsService();
 
   const doc = await docs.documents.get({
@@ -99,7 +112,13 @@ export async function getDocEndIndex(
 
   const content = getBodyContent(doc.data, tabId);
 
-  return content.length > 0
+  const endIndex = content.length > 0
     ? (content[content.length - 1].endIndex ?? 1)
     : 1;
+
+  const firstParagraphEnd = content.length < 2
+    ? 1
+    : (content[1]?.endIndex ?? 1);
+
+  return { endIndex, firstParagraphEnd };
 }

@@ -1,6 +1,6 @@
 {
   "name": "mcp-gdocs",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "type": "module",
   "description": "MCP server for Google Docs, Drive & Comments (OAuth + Service Account)",
   "author": "Artem Zheleznov (https://github.com/iamtemazhe)",
@@ -12,27 +12,28 @@
   "bugs": {
     "url": "https://github.com/iamtemazhe/mcp-gdocs/issues"
   },
-  "main": "dist/index.js",
+  "main": "build/index.js",
   "bin": {
-    "mcp-gdocs": "dist/index.js"
+    "mcp-gdocs": "build/index.js"
   },
   "files": [
-    "dist"
+    "build"
   ],
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "auth": "node dist/index.js auth",
+    "build": "tsc && chmod 755 build/index.js",
+    "start": "node build/index.js",
+    "auth": "node build/index.js auth",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build",
+    "prepare": "npm run build",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js",
     "test": "node --import tsx --test tests/unit/*.test.ts",
-    "test:integration": "bash tests/run-all.sh",
-    "test:drive": "bash tests/run-all.sh drive",
-    "test:docs": "bash tests/run-all.sh docs",
-    "test:tables": "bash tests/run-all.sh tables",
-    "test:markdown": "bash tests/run-all.sh markdown",
-    "test:images": "bash tests/run-all.sh images",
-    "test:comments": "bash tests/run-all.sh comments"
+    "test:integration": "bash tests/integration/run-all.sh",
+    "test:drive": "bash tests/integration/run-all.sh drive",
+    "test:docs": "bash tests/integration/run-all.sh docs",
+    "test:tables": "bash tests/integration/run-all.sh tables",
+    "test:markdown": "bash tests/integration/run-all.sh markdown",
+    "test:images": "bash tests/integration/run-all.sh images",
+    "test:comments": "bash tests/integration/run-all.sh comments"
   },
   "keywords": [
     "mcp",

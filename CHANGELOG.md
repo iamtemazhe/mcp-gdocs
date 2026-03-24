@@ -1,38 +1,49 @@
 # Changelog
 
+## [1.2.0] - 2026-03-21
+
+### Added
+- **Format by text:** find text in the document and apply styles without knowing indices
+- **Table with data:** create a table pre-filled with headers and rows in one call
+- **Rename tab:** rename document tabs
+- Markdown images are now supported in markdown-to-document conversion
+
+### Fixed
+- Tab renaming now works correctly
+- Paragraph and heading styles no longer bleed into adjacent paragraphs
+
+### Changed
+- Tool descriptions now guide the AI on where to find required IDs and allowed values
+- Optional style fields clearly indicate they can be omitted
+- Replace tools clearly differentiate find-replace, full-body replace, and markdown replace
+- 44 tools total (was 39 in 1.0.0)
+
 ## [1.1.2] - 2026-03-21
 
 ### Changed
-- Faster API calls — only required fields are fetched for metadata, tables, and end-index lookups
-- Docs and Drive service instances are cached across tool calls
+- Faster API calls — only required fields are fetched
 - Improved tool descriptions with references to related tools
 
 ## [1.1.1] - 2026-03-20
 
 ### Added
-- Tab support — all tools can target specific document tabs via `tabId`
-- Strikethrough and horizontal rule in Markdown parser
-- Phased request execution — inserts run before formatting to prevent index conflicts
-- Crash protection for unhandled errors
-- CI/CD: GitHub Actions for build checks and npm publish
-- Unit tests for all utility modules
-
-### Changed
-- Hex color validation with clear error messages
-- OAuth is now the highest-priority auth method
+- Tab support — all tools can target specific document tabs
+- Strikethrough and horizontal rule in Markdown conversion
+- Formatting and insertions no longer conflict when run together
 
 ### Fixed
-- Paragraph/heading styles no longer bleed into adjacent paragraphs
+- Paragraph and heading styles no longer affect adjacent paragraphs
+
+### Changed
+- OAuth is now the highest-priority auth method
 
 ## [1.1.0] - 2026-03-16
 
 ### Added
-- Paragraph/heading styles no longer bleed into adjacent paragraphs
-- CI/CD: GitHub Actions for build checks and npm publish on tag
-- Crash protection for unhandled errors
+- Paragraph and heading style isolation
 
 ### Changed
-- OAuth is now the highest-priority auth method (before Service Account and ADC)
+- OAuth is now the highest-priority auth method
 
 ### Fixed
 - Applying paragraph or heading style no longer affects the preceding paragraph
@@ -41,22 +52,15 @@
 
 ### Initial Release — 39 tools
 
-### Features
-- **Docs Read (3):** read document (text/json/markdown), get info, list tabs
-- **Docs Write (6):** insert, append, delete, replace all, replace content, page break
-- **Docs Format (3):** text style, paragraph style, heading style
-- **Docs Tables (7):** insert table, insert/delete row/column, update cell content/style
-- **Docs Media (1):** insert image
-- **Docs Markdown (2):** replace with markdown, append markdown
-- **Docs Batch (1):** multiple operations in one API call
-- **Comments (6):** list, get, add, reply, resolve, delete
-- **Drive (11):** list, search, create, template, folder ops, move, copy, rename, delete
-
-### Bulk Operations
-- All write/format tools support `items` array for batch execution
-- Automatic chunking for large batches (>100 requests)
-
-### Authentication
-- OAuth 2.0, Service Account, CREDENTIALS_CONFIG (Base64), ADC
-- Impersonation support for Google Workspace
-- Profile isolation via `GOOGLE_MCP_PROFILE`
+- **Docs Read:** read document (text/json/markdown), get info, list tabs
+- **Docs Write:** insert, append, delete, replace, page break
+- **Docs Format:** text style, paragraph style, heading style
+- **Docs Tables:** insert table, insert/delete row/column, update cell content/style
+- **Docs Media:** insert image
+- **Docs Markdown:** replace with markdown, append markdown
+- **Docs Batch:** multiple operations in one API call
+- **Comments:** list, get, add, reply, resolve, delete
+- **Drive:** list, search, create, template, folder ops, move, copy, rename, delete
+- All write/format tools support bulk execution
+- OAuth 2.0, Service Account, and Application Default Credentials
+- Profile isolation for multiple Google accounts

@@ -4,52 +4,51 @@ import type { docs_v1 } from "googleapis";
 import { textResult, handleTool } from "../utils/errors.js";
 import {
   sendBatchedRequests,
-  getDocEndIndex,
+  fetchDocIndices,
   tabIdParam,
   injectTabId,
 } from "../utils/batch.js";
 
 const insertTextItemSchema = z.object({
   text: z.string().describe("Text to insert"),
-  index: z.number().int().min(1).describe(
-    "Insertion position (1 = start of document)",
-  ),
+  index: z.number().int().min(1).describe("1-based index"),
 });
 
 const deleteRangeItemSchema = z.object({
-  startIndex: z.number().int().min(1).describe(
-    "Range start index",
-  ),
-  endIndex: z.number().int().min(2).describe(
-    "Range end index",
-  ),
+  startIndex: z.number().int().min(1).describe("Range start"),
+  endIndex: z.number().int().min(2).describe("Range end"),
 });
 
 const replaceAllItemSchema = z.object({
-  searchText: z.string().describe("Text to find"),
-  replaceText: z.string().describe("Replacement text"),
-  matchCase: z.boolean().default(true).describe(
-    "Whether to match case",
-  ),
+  searchText: z.string().describe("Search string"),
+  replaceText: z.string().describe("Replace string"),
+  matchCase: z.boolean().default(true).describe("Case-sensitive"),
 });
 
 const pageBreakItemSchema = z.object({
-  index: z.number().int().min(1).describe(
-    "Position to insert the page break",
-  ),
+  index: z.number().int().min(1).describe("Insert index"),
 });
 
 export function registerDocsWriteTools(
   server: McpServer,
 ): void {
-  server.tool(
+  server.registerTool(
     "docs_insert_text",
-    "Insert text at index. Get index from docs_read_document (format: json)",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      items: z.array(insertTextItemSchema).min(1)
-        .describe("Array of text insertions"),
+      title: "Insert Text",
+      description: "Bulk insert at indices (json read).",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        items: z.array(insertTextItemSchema).min(1)
+          .describe("Insert operations"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ documentId, tabId, items }) => {
       const requests: docs_v1.Schema$Request[] =
@@ -64,21 +63,31 @@ export function registerDocsWriteTools(
         documentId, injectTabId(requests, tabId),
       );
 
-      return textResult(`Выполнено ${items.length} вставок`);
+      return textResult(`Done: ${items.length} insert(s)`);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_append_text",
-    "Append text to the end of the document",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      text: z.string().describe("Text to append"),
+      title: "Append Text",
+      description: "Append text at document end.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        text: z.string().describe("Text to append"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ documentId, tabId, text }) => {
-      const endIndex =
-        await getDocEndIndex(documentId, tabId) - 1;
+      const { endIndex: docEnd } =
+        await fetchDocIndices(documentId, tabId);
+      const endIndex = docEnd - 1;
 
       const reqs: docs_v1.Schema$Request[] = [{
         insertText: {
@@ -92,20 +101,28 @@ export function registerDocsWriteTools(
       );
 
       return textResult(
-        `Добавлено ${text.length} символов `
-          + `в конец документа`,
+        `Appended ${text.length} character(s)`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_delete_range",
-    "Delete content ranges. Get startIndex/endIndex from docs_read_document (format: json)",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      items: z.array(deleteRangeItemSchema).min(1)
-        .describe("Array of ranges to delete"),
+      title: "Delete Range",
+      description: "Bulk delete by index ranges.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        items: z.array(deleteRangeItemSchema).min(1)
+          .describe("Ranges to delete"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ documentId, tabId, items }) => {
       const requests: docs_v1.Schema$Request[] =
@@ -122,18 +139,28 @@ export function registerDocsWriteTools(
         documentId, injectTabId(requests, tabId),
       );
 
-      return textResult(`Удалено ${items.length} диапазонов`);
+      return textResult(`Deleted ${items.length} range(s)`);
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_replace_all_text",
-    "Find and replace text patterns across document. Supports bulk search-replace pairs",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      items: z.array(replaceAllItemSchema).min(1)
-        .describe("Array of search-replace pairs"),
+      title: "Replace All Text",
+      description:
+        "Bulk find-replace (literal match). Does NOT replace entire body; use docs_replace_document_content for that.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        items: z.array(replaceAllItemSchema).min(1)
+          .describe("Search-replace pairs"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: true,
+      },
     },
     handleTool(async ({ documentId, tabId, items }) => {
       const requests: docs_v1.Schema$Request[] =
@@ -162,25 +189,32 @@ export function registerDocsWriteTools(
       }, 0);
 
       return textResult(
-        `Выполнено ${items.length} замен, `
-          + `изменено ${totalChanged} вхождений`,
+        `${items.length} rule(s), ${totalChanged} occurrence(s) changed`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_replace_document_content",
-    "Clear and replace entire document content. For partial edits use docs_insert_text or docs_delete_range",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      newContent: z.string().describe(
-        "New document content",
-      ),
+      title: "Replace Document Content",
+      description:
+        "Clear and replace entire body with plain text. For find-replace use docs_replace_all_text.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        newContent: z.string().describe("New body text"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: true,
+      },
     },
     handleTool(async ({ documentId, tabId, newContent }) => {
-      const endIndex =
-        await getDocEndIndex(documentId, tabId);
+      const { endIndex } =
+        await fetchDocIndices(documentId, tabId);
       const requests: docs_v1.Schema$Request[] = [];
 
       if (endIndex > 2) {
@@ -206,20 +240,29 @@ export function registerDocsWriteTools(
       );
 
       return textResult(
-        `Содержимое заменено `
-          + `(${newContent.length} символов)`,
+        `Body replaced (${newContent.length} chars)`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_insert_page_break",
-    "Insert page break at index. Get index from docs_read_document (format: json)",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      items: z.array(pageBreakItemSchema).min(1)
-        .describe("Array of positions for page breaks"),
+      title: "Insert Page Break",
+      description:
+        "Bulk insert page breaks at indices.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        items: z.array(pageBreakItemSchema).min(1)
+          .describe("Break positions"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ documentId, tabId, items }) => {
       const requests: docs_v1.Schema$Request[] =
@@ -234,8 +277,47 @@ export function registerDocsWriteTools(
       );
 
       return textResult(
-        `Вставлено ${items.length} `
-          + `разрывов страниц`,
+        `Inserted ${items.length} page break(s)`,
+      );
+    }),
+  );
+
+  server.registerTool(
+    "docs_rename_tab",
+    {
+      title: "Rename Tab",
+      description: "Rename one tab by tabId.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: z.string().describe("Tab ID"),
+        newTitle: z.string().min(1).describe("New title"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
+    },
+    handleTool(async ({ documentId, tabId, newTitle }) => {
+      const { getDocsService } = await import(
+        "../auth.js"
+      );
+      const docs = await getDocsService();
+      await docs.documents.batchUpdate({
+        documentId,
+        requestBody: {
+          requests: [{
+            updateDocumentTabProperties: {
+              tabProperties: { tabId, title: newTitle },
+              fields: "title",
+            },
+          } as docs_v1.Schema$Request],
+        },
+      });
+
+      return textResult(
+        `Tab "${tabId}" renamed to "${newTitle}"`,
       );
     }),
   );

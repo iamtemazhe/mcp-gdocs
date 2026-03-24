@@ -292,6 +292,22 @@ async function resolveAuth(): Promise<AuthClient> {
   return cachedAuth;
 }
 
+// ── Retry ──────────────────────────────────────────────────────────
+
+const RETRY_CONFIG = {
+  retry: 3,
+  retryDelayMultiplier: 2,
+  maxRetryDelay: 32_000,
+  statusCodesToRetry: [
+    [429, 429],
+    [500, 599],
+  ] as [number, number][],
+  httpMethodsToRetry: [
+    "GET", "HEAD", "PUT", "OPTIONS",
+    "DELETE", "POST", "PATCH",
+  ],
+};
+
 // ── Public API ─────────────────────────────────────────────────────
 
 export async function authorize(): Promise<void> {
@@ -309,7 +325,9 @@ export async function getDocsService(): Promise<docs_v1.Docs> {
   if (cachedDocs) return cachedDocs;
   const auth = await resolveAuth();
   cachedDocs = google.docs({
-    version: "v1", auth: auth as GoogleAuth,
+    version: "v1",
+    auth: auth as GoogleAuth,
+    retryConfig: RETRY_CONFIG,
   });
   return cachedDocs;
 }
@@ -318,7 +336,9 @@ export async function getDriveService(): Promise<drive_v3.Drive> {
   if (cachedDrive) return cachedDrive;
   const auth = await resolveAuth();
   cachedDrive = google.drive({
-    version: "v3", auth: auth as GoogleAuth,
+    version: "v3",
+    auth: auth as GoogleAuth,
+    retryConfig: RETRY_CONFIG,
   });
   return cachedDrive;
 }

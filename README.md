@@ -1,6 +1,8 @@
 # mcp-gdocs
 
-[Русская версия](README.ru.md)
+[Русский](docs/README.ru.md) | [中文](docs/README.cn.md)
+
+[Why mcp-gdocs exists](docs/WHYIEXIST.md)
 
 MCP server for **Google Docs**, **Google Drive** and **Comments** with flexible authentication.
 
@@ -105,9 +107,13 @@ Most write operations accept an `items` array for bulk execution in a single cal
 | `docs_update_table_cell_content` | Update one or multiple cells content                |
 | `docs_update_table_cell_style`   | Cell background color                               |
 | `docs_insert_image`              | Insert one or multiple images from URL              |
+| `docs_insert_local_image`        | Insert images from local files (upload + insert)    |
 | `docs_replace_with_markdown`     | Replace entire document from Markdown (headings, lists, tables, strikethrough, HR) |
 | `docs_append_markdown`           | Append Markdown-formatted content                   |
 | `docs_batch_update`              | Batch multiple operations in one API call           |
+| `docs_rename_tab`                | Rename a document tab                               |
+| `docs_insert_table_with_data`    | Create a table and fill it with data in one call    |
+| `docs_format_by_text`            | Find text and apply formatting without knowing indices |
 
 
 ### Comments
@@ -143,11 +149,7 @@ Most write operations accept an `items` array for bulk execution in a single cal
 
 ### Batch Operations
 
-`docs_batch_update` combines multiple heterogeneous operations into a single HTTP request to Google Docs API. This helps with the per-minute quota (60 write ops/min) during bulk formatting.
-
-Supported operation types: `updateTextStyle`, `updateParagraphStyle`, `updateHeadingStyle`, `insertText`, `deleteContentRange`, `replaceAllText`, `insertPageBreak`, `insertTable`, `insertInlineImage`, `updateTableCellStyle`.
-
-Arrays of >100 operations are automatically split into chunks.
+The batch update tool combines multiple heterogeneous operations into a single API request. This helps with the per-minute quota (60 write ops/min) during bulk formatting. Large arrays are automatically split into chunks.
 
 ---
 
@@ -351,8 +353,7 @@ OAuth refresh tokens are stored in `~/.config/mcp-gdocs/token.json` (respects `X
 - **SA without Workspace:** Service account without Google Workspace license has Drive quota = 0 and cannot create files. Use OAuth or impersonation.
 - **Comment anchoring:** Programmatically created comments appear in the list but may not be anchored to text in Google Docs UI (Drive API limitation).
 - **Deeply nested lists:** Lists with 3+ nesting levels may have formatting artifacts when converting Markdown.
-- **Markdown images:** Images in Markdown syntax (`![alt](url)`) are not yet supported; use `docs_insert_image` separately.
-- **Paragraph style safe range:** `docs_apply_paragraph_style` and `docs_apply_heading_style` automatically shift `startIndex` by +1 (when > 1) to prevent styles from bleeding into the preceding paragraph. This matches Google Docs API behavior where structural element boundaries overlap with the previous paragraph's newline.
+- **Paragraph style safe range:** paragraph and heading style tools automatically adjust ranges to prevent styles from bleeding into adjacent paragraphs.
 
 ## Troubleshooting
 
@@ -360,6 +361,8 @@ OAuth refresh tokens are stored in `~/.config/mcp-gdocs/token.json` (respects `X
 - **Authorization errors:** make sure Docs API and Drive API are enabled in Google Cloud Console. For OAuth — check that your email is added as Test User in OAuth consent screen.
 - **Re-authorization:** delete `~/.config/mcp-gdocs/token.json` and run `npx -y mcp-gdocs auth` again.
 
-## License
+---
 
-[MIT](LICENSE)
+[Changelog](CHANGELOG.md)
+
+[License](LICENSE)

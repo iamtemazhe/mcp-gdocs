@@ -1,9 +1,11 @@
 src/
 tests/
+docs/
+.github/
 tsconfig.json
 .gitignore
 .env
 *.ts
-!dist/**
+!build/**
 credentials.json
 *.json.bak

@@ -7,7 +7,7 @@ import {
 import { textResult, handleTool } from "../utils/errors.js";
 import {
   sendBatchedRequests,
-  getDocEndIndex,
+  fetchDocIndices,
   tabIdParam,
   injectTabId,
 } from "../utils/batch.js";
@@ -30,10 +30,8 @@ function isInsertRequest(
 }
 
 /**
- * Отправляет batch'и с фазовым разделением:
- * сначала все insert-запросы, потом все format-запросы.
- * Это предотвращает конфликты индексов при
- * одновременной вставке и форматировании.
+ * Sends batches in two phases: inserts first, then formats,
+ * to avoid index conflicts when mixing both.
  */
 async function sendBatches(
   documentId: string,
@@ -65,28 +63,54 @@ async function sendBatches(
   return total;
 }
 
+function extractFirstHeading(
+  markdown: string,
+): string | null {
+  const match = /^#{1,6}\s+(.+)$/m.exec(markdown);
+  return match ? match[1].trim() : null;
+}
+
 export function registerDocsMarkdownTools(
   server: McpServer,
 ): void {
-  server.tool(
+  server.registerTool(
     "docs_replace_with_markdown",
-    "Replace document content with Markdown. Supports headings, "
-    + "bold, italic, strikethrough, links, lists, code blocks, "
-    + "tables, horizontal rules",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      markdown: z.string().describe("Markdown content"),
+      title: "Replace With Markdown",
+      description:
+        "Clear body and render Markdown as formatted content. For plain text use docs_replace_document_content.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        markdown: z.string().describe("Markdown source"),
+        preserveTitle: z.boolean().default(false).describe(
+          "Keep first paragraph",
+        ),
+        firstHeadingAsTitle: z.boolean().default(false)
+          .describe("Title from first H1"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: true,
+      },
     },
-    handleTool(async ({ documentId, tabId, markdown }) => {
-      const endIndex =
-        await getDocEndIndex(documentId, tabId);
+    handleTool(async ({
+      documentId, tabId, markdown,
+      preserveTitle, firstHeadingAsTitle,
+    }) => {
+      const { endIndex, firstParagraphEnd } =
+        await fetchDocIndices(documentId, tabId);
+      const deleteFrom = preserveTitle
+        ? firstParagraphEnd
+        : 1;
 
-      if (endIndex > 2) {
+      if (endIndex > deleteFrom + 1) {
         const delReqs = injectTabId([{
           deleteContentRange: {
             range: {
-              startIndex: 1,
+              startIndex: deleteFrom,
               endIndex: endIndex - 1,
             },
           },
@@ -94,31 +118,55 @@ export function registerDocsMarkdownTools(
         await sendBatchedRequests(documentId, delReqs);
       }
 
+      const insertAt = preserveTitle ? deleteFrom : 1;
       const batches =
-        markdownToRequestBatches(markdown, 1);
+        markdownToRequestBatches(markdown, insertAt);
       const total = await sendBatches(
         documentId, batches, tabId,
       );
 
+      if (firstHeadingAsTitle) {
+        const heading = extractFirstHeading(markdown);
+        if (heading) {
+          const { getDriveService } = await import(
+            "../auth.js"
+          );
+          const drive = await getDriveService();
+          await drive.files.update({
+            fileId: documentId,
+            requestBody: { name: heading },
+          });
+        }
+      }
+
       return textResult(
-        `Документ заполнен из Markdown `
-          + `(${total} операций)`,
+        `Replaced from Markdown (${total} ops)`,
       );
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_append_markdown",
-    "Append Markdown content to document end. Same Markdown "
-    + "features as docs_replace_with_markdown",
     {
-      documentId: z.string().describe("Document ID"),
-      tabId: tabIdParam,
-      markdown: z.string().describe("Markdown to append"),
+      title: "Append Markdown",
+      description:
+        "Append Markdown at document end.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        tabId: tabIdParam,
+        markdown: z.string().describe("Markdown chunk"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ documentId, tabId, markdown }) => {
-      const endIndex =
-        await getDocEndIndex(documentId, tabId) - 1;
+      const { endIndex: docEnd } =
+        await fetchDocIndices(documentId, tabId);
+      const endIndex = docEnd - 1;
 
       const batches = markdownToRequestBatches(
         markdown, Math.max(endIndex, 1),
@@ -128,8 +176,7 @@ export function registerDocsMarkdownTools(
       );
 
       return textResult(
-        `Markdown добавлен в конец документа `
-          + `(${total} операций)`,
+        `Markdown appended (${total} ops)`,
       );
     }),
   );

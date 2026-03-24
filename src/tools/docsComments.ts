@@ -11,15 +11,24 @@ import {
 export function registerDocsCommentTools(
   server: McpServer,
 ): void {
-  server.tool(
+  server.registerTool(
     "docs_list_comments",
-    "List all comments on document with replies and resolution "
-    + "status",
     {
-      documentId: z.string().describe("Document ID"),
-      includeDeleted: z.boolean().default(false).describe(
-        "Include deleted comments",
-      ),
+      title: "List Comments",
+      description:
+        "List comments: id, quote, resolved.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        includeDeleted: z.boolean().default(false).describe(
+          "Include deleted",
+        ),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: true,
+      },
     },
     handleTool(async ({ documentId, includeDeleted }) => {
       const drive = await getDriveService();
@@ -49,13 +58,24 @@ export function registerDocsCommentTools(
     }),
   );
 
-  server.tool(
+  server.registerTool(
     "docs_get_comment",
-    "Get single comment details. Get commentId from "
-    + "docs_list_comments",
     {
-      documentId: z.string().describe("Document ID"),
-      commentId: z.string().describe("Comment ID"),
+      title: "Get Comment",
+      description:
+        "One comment thread with replies.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        commentId: z.string().describe(
+          "Comment ID from docs_list_comments",
+        ),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: true,
+      },
     },
     handleTool(async ({ documentId, commentId }) => {
       const drive = await getDriveService();
@@ -76,19 +96,28 @@ export function registerDocsCommentTools(
 
   const addCommentItemSchema = z.object({
     documentId: z.string().describe("Document ID"),
-    content: z.string().describe("Comment text"),
+    content: z.string().describe("Comment body"),
     quotedText: z.string().optional().describe(
-      "Document text to anchor the comment to",
+      "Anchor quote",
     ),
   });
 
-  server.tool(
+  server.registerTool(
     "docs_add_comment",
-    "Add comment to document. Anchor to text "
-    + "via quotedText (exact text from document)",
     {
-      items: z.array(addCommentItemSchema).min(1)
-        .describe("Array of comments to add"),
+      title: "Add Comment",
+      description:
+        "Bulk create; quotedText must match doc.",
+      inputSchema: {
+        items: z.array(addCommentItemSchema).min(1)
+          .describe("Comments to add"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ items }) => {
       const drive = await getDriveService();
@@ -126,17 +155,28 @@ export function registerDocsCommentTools(
 
   const replyItemSchema = z.object({
     documentId: z.string().describe("Document ID"),
-    commentId: z.string().describe("Comment ID"),
-    content: z.string().describe("Reply text"),
+    commentId: z.string().describe(
+      "Comment ID from docs_list_comments",
+    ),
+    content: z.string().describe("Reply body"),
   });
 
-  server.tool(
+  server.registerTool(
     "docs_reply_to_comment",
-    "Reply to existing comment. Get commentId from "
-    + "docs_list_comments",
     {
-      items: z.array(replyItemSchema).min(1)
-        .describe("Array of replies to create"),
+      title: "Reply To Comment",
+      description:
+        "Bulk add replies to comments.",
+      inputSchema: {
+        items: z.array(replyItemSchema).min(1)
+          .describe("Replies to add"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ items }) => {
       const drive = await getDriveService();
@@ -160,16 +200,26 @@ export function registerDocsCommentTools(
 
   const resolveItemSchema = z.object({
     documentId: z.string().describe("Document ID"),
-    commentId: z.string().describe("Comment ID"),
+    commentId: z.string().describe(
+      "Comment ID from docs_list_comments",
+    ),
   });
 
-  server.tool(
+  server.registerTool(
     "docs_resolve_comment",
-    "Mark comment as resolved. Get commentId from "
-    + "docs_list_comments",
     {
-      items: z.array(resolveItemSchema).min(1)
-        .describe("Array of comments to resolve"),
+      title: "Resolve Comment",
+      description: "Bulk resolve comments.",
+      inputSchema: {
+        items: z.array(resolveItemSchema).min(1)
+          .describe("Comments to resolve"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ items }) => {
       const drive = await getDriveService();
@@ -195,15 +245,27 @@ export function registerDocsCommentTools(
 
   const deleteCommentItemSchema = z.object({
     documentId: z.string().describe("Document ID"),
-    commentId: z.string().describe("Comment ID"),
+    commentId: z.string().describe(
+      "Comment ID from docs_list_comments",
+    ),
   });
 
-  server.tool(
+  server.registerTool(
     "docs_delete_comment",
-    "Delete comment. Get commentId from docs_list_comments",
     {
-      items: z.array(deleteCommentItemSchema).min(1)
-        .describe("Array of comments to delete"),
+      title: "Delete Comment",
+      description:
+        "Bulk delete comments (Drive API).",
+      inputSchema: {
+        items: z.array(deleteCommentItemSchema).min(1)
+          .describe("Comments to delete"),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
     },
     handleTool(async ({ items }) => {
       const drive = await getDriveService();
