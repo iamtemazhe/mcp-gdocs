@@ -15,10 +15,9 @@ function truncate(text: string): string {
   if (!MAX_RESPONSE || text.length <= MAX_RESPONSE) {
     return text;
   }
-  const full = text.length;
   return text.slice(0, MAX_RESPONSE)
-    + `\n\n[Truncated at ${MAX_RESPONSE}`
-    + ` of ${full} chars]`;
+    + `\n\n[Response truncated at ${MAX_RESPONSE} chars. `
+    + "Use 'fields' parameter or 'summary' format to reduce response size.]";
 }
 
 export function textResult(
@@ -56,11 +55,11 @@ export function bulkResult(
   settled: PromiseSettledResult<unknown>[],
 ): CallToolResult {
   const errors: { index: number; error: string }[] = [];
-  let ok = 0;
+  const results: { index: number; result: unknown }[] = [];
 
   settled.forEach((s, i) => {
     if (s.status === "fulfilled") {
-      ok++;
+      results.push({ index: i, result: s.value });
     } else {
       const msg = s.reason instanceof Error
         ? s.reason.message
@@ -70,17 +69,22 @@ export function bulkResult(
   });
 
   const total = settled.length;
+  const ok = results.length;
   const summary = `Done ${ok}/${total}`
     + (errors.length > 0
       ? `, errors: ${errors.length}`
       : "");
 
-  const text = errors.length > 0
-    ? `${summary}\n${JSON.stringify(errors)}`
-    : summary;
+  const parts: string[] = [summary];
+  if (results.length > 0) {
+    parts.push(JSON.stringify(results));
+  }
+  if (errors.length > 0) {
+    parts.push(JSON.stringify(errors));
+  }
 
   return {
-    content: [{ type: "text", text }],
+    content: [{ type: "text", text: parts.join("\n") }],
     isError: ok === 0 && total > 0,
   };
 }
@@ -98,11 +102,14 @@ export function formatApiError(error: unknown): CallToolResult {
       hint = ". Check service account permissions "
         + "on the document (Share → Add email)";
     } else if (status === 404) {
-      hint = ". Document not found or no access. "
-        + "Verify documentId via drive_list_documents "
-        + "or drive_search_documents";
+      hint = ". Resource not found. Verify document ID or use "
+        + "drive_list_documents.";
     } else if (status === 429) {
       hint = ". Rate limit exceeded, retry in a moment";
+    } else if (status === 500) {
+      hint = ". Google API internal error. The request may succeed on retry.";
+    } else if (status === 502 || status === 503) {
+      hint = ". Google API temporarily unavailable. Retry in a moment.";
     }
 
     logger.error(`${prefix}: ${message}`, {
@@ -115,6 +122,10 @@ export function formatApiError(error: unknown): CallToolResult {
         { type: "text", text: `${prefix}: ${message}${hint}` },
       ],
       isError: true,
+      _meta: {
+        googleStatus: status,
+        googleMessage: message,
+      },
     };
   }
 

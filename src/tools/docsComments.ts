@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { drive_v3 } from "googleapis";
+import { documentIdParam } from "../utils/schemas.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDriveService } from "../auth.js";
 import {
@@ -16,9 +17,9 @@ export function registerDocsCommentTools(
     {
       title: "List Comments",
       description:
-        "List comments: id, quote, resolved.",
+        "List comment threads on a document.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         includeDeleted: z.boolean().default(false).describe(
           "Include deleted",
         ),
@@ -63,9 +64,9 @@ export function registerDocsCommentTools(
     {
       title: "Get Comment",
       description:
-        "One comment thread with replies.",
+        "Fetch one comment thread including replies.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         commentId: z.string().describe(
           "Comment ID from docs_list_comments",
         ),
@@ -95,7 +96,7 @@ export function registerDocsCommentTools(
   );
 
   const addCommentItemSchema = z.object({
-    documentId: z.string().describe("Document ID"),
+    documentId: documentIdParam,
     content: z.string().describe("Comment body"),
     quotedText: z.string().optional().describe(
       "Anchor quote",
@@ -107,7 +108,7 @@ export function registerDocsCommentTools(
     {
       title: "Add Comment",
       description:
-        "Bulk create; quotedText must match doc.",
+        "Add comments to a document, optionally anchoring with an exact text quote.",
       inputSchema: {
         items: z.array(addCommentItemSchema).min(1)
           .describe("Comments to add"),
@@ -154,7 +155,7 @@ export function registerDocsCommentTools(
   );
 
   const replyItemSchema = z.object({
-    documentId: z.string().describe("Document ID"),
+    documentId: documentIdParam,
     commentId: z.string().describe(
       "Comment ID from docs_list_comments",
     ),
@@ -166,7 +167,7 @@ export function registerDocsCommentTools(
     {
       title: "Reply To Comment",
       description:
-        "Bulk add replies to comments.",
+        "Reply to existing comment threads in bulk.",
       inputSchema: {
         items: z.array(replyItemSchema).min(1)
           .describe("Replies to add"),
@@ -199,7 +200,7 @@ export function registerDocsCommentTools(
   );
 
   const resolveItemSchema = z.object({
-    documentId: z.string().describe("Document ID"),
+    documentId: documentIdParam,
     commentId: z.string().describe(
       "Comment ID from docs_list_comments",
     ),
@@ -209,7 +210,8 @@ export function registerDocsCommentTools(
     "docs_resolve_comment",
     {
       title: "Resolve Comment",
-      description: "Bulk resolve comments.",
+      description:
+        "Mark comment threads as resolved in bulk.",
       inputSchema: {
         items: z.array(resolveItemSchema).min(1)
           .describe("Comments to resolve"),
@@ -244,7 +246,7 @@ export function registerDocsCommentTools(
   );
 
   const deleteCommentItemSchema = z.object({
-    documentId: z.string().describe("Document ID"),
+    documentId: documentIdParam,
     commentId: z.string().describe(
       "Comment ID from docs_list_comments",
     ),
@@ -255,7 +257,7 @@ export function registerDocsCommentTools(
     {
       title: "Delete Comment",
       description:
-        "Bulk delete comments (Drive API).",
+        "Delete comment threads permanently in bulk.",
       inputSchema: {
         items: z.array(deleteCommentItemSchema).min(1)
           .describe("Comments to delete"),

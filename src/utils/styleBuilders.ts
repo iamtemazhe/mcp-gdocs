@@ -2,6 +2,75 @@ import { z } from "zod";
 import type { docs_v1 } from "googleapis";
 import { hexToRgb } from "./colors.js";
 
+// ── Dimensions & table geometry (shared by batch / tables / document style) ─
+
+export function ptDim(magnitude: number): docs_v1.Schema$Dimension {
+  return { magnitude, unit: "PT" };
+}
+
+export function buildTableRange(
+  tableStartIndex: number,
+  rowIndex: number,
+  columnIndex: number,
+  rowSpan: number,
+  columnSpan: number,
+): docs_v1.Schema$TableRange {
+  return {
+    tableCellLocation: buildTableCellLocation(
+      tableStartIndex,
+      rowIndex,
+      columnIndex,
+    ),
+    rowSpan,
+    columnSpan,
+  };
+}
+
+export function buildTableCellLocation(
+  tableStartIndex: number,
+  rowIndex: number,
+  columnIndex: number,
+): docs_v1.Schema$TableCellLocation {
+  return {
+    tableStartLocation: { index: tableStartIndex },
+    rowIndex,
+    columnIndex,
+  };
+}
+
+/** Preset for createParagraphBullets (Google Docs API). */
+export const bulletPresetSchema = z.enum([
+  "BULLET_DISC_CIRCLE_SQUARE",
+  "BULLET_DIAMONDX_ARROW3D_SQUARE",
+  "BULLET_CHECKBOX",
+  "BULLET_ARROW_DIAMOND_DISC",
+  "BULLET_STAR_CIRCLE_SQUARE",
+  "BULLET_ARROW3D_CIRCLE_SQUARE",
+  "BULLET_LEFTTRIANGLE_DIAMOND_DISC",
+  "BULLET_DIAMONDX_HOLLOWDIAMOND_SQUARE",
+  "BULLET_DIAMOND_CIRCLE_SQUARE",
+  "NUMBERED_DECIMAL_ALPHA_ROMAN",
+  "NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS",
+  "NUMBERED_DECIMAL_NESTED",
+  "NUMBERED_UPPERALPHA_ALPHA_ROMAN",
+  "NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL",
+  "NUMBERED_ZERODECIMAL_ALPHA_ROMAN",
+]).describe("Bullet or numbering style");
+
+export const sectionBreakTypeSchema = z.enum([
+  "NEXT_PAGE",
+  "CONTINUOUS",
+]).describe("Section break type");
+
+/** Common Zod fields for tools that anchor on a table cell. */
+export const tableCellLocationParams = {
+  tableStartIndex: z.number().int().describe(
+    "Table start index from docs_read_document(format:'json')",
+  ),
+  rowIndex: z.number().int().min(0).describe("Row (0-based)"),
+  columnIndex: z.number().int().min(0).describe("Column (0-based)"),
+};
+
 // ── Image ──────────────────────────────────────────────────────────
 
 export const imageItemSchema = z.object({
@@ -32,13 +101,10 @@ export function buildImageRequest(
   if (item.width || item.height) {
     const size: docs_v1.Schema$Size = {};
     if (item.width) {
-      size.width = { magnitude: item.width, unit: "PT" };
+      size.width = ptDim(item.width);
     }
     if (item.height) {
-      size.height = {
-        magnitude: item.height,
-        unit: "PT",
-      };
+      size.height = ptDim(item.height);
     }
     insertReq.objectSize = size;
   }
@@ -76,19 +142,21 @@ export function buildTableCellStyleRequest(
     fields.push("backgroundColor");
   }
 
+  if (fields.length === 0) {
+    throw new Error(
+      "At least backgroundColor is required for table cell style",
+    );
+  }
+
   return {
     updateTableCellStyle: {
-      tableRange: {
-        tableCellLocation: {
-          tableStartLocation: {
-            index: tableStartIndex,
-          },
-          rowIndex: item.rowIndex,
-          columnIndex: item.columnIndex,
-        },
-        rowSpan: 1,
-        columnSpan: 1,
-      },
+      tableRange: buildTableRange(
+        tableStartIndex,
+        item.rowIndex,
+        item.columnIndex,
+        1,
+        1,
+      ),
       tableCellStyle: style,
       fields: fields.join(","),
     },
@@ -246,10 +314,7 @@ export function buildTextStyle(
     fields.push("strikethrough");
   }
   if (item.fontSize !== undefined) {
-    style.fontSize = {
-      magnitude: item.fontSize,
-      unit: "PT",
-    };
+    style.fontSize = ptDim(item.fontSize);
     fields.push("fontSize");
   }
   if (item.fontFamily !== undefined) {
@@ -309,31 +374,19 @@ export function buildParagraphStyle(
     fields.push("lineSpacing");
   }
   if (item.spaceBefore !== undefined) {
-    style.spaceAbove = {
-      magnitude: item.spaceBefore,
-      unit: "PT",
-    };
+    style.spaceAbove = ptDim(item.spaceBefore);
     fields.push("spaceAbove");
   }
   if (item.spaceAfter !== undefined) {
-    style.spaceBelow = {
-      magnitude: item.spaceAfter,
-      unit: "PT",
-    };
+    style.spaceBelow = ptDim(item.spaceAfter);
     fields.push("spaceBelow");
   }
   if (item.indentFirstLine !== undefined) {
-    style.indentFirstLine = {
-      magnitude: item.indentFirstLine,
-      unit: "PT",
-    };
+    style.indentFirstLine = ptDim(item.indentFirstLine);
     fields.push("indentFirstLine");
   }
   if (item.indentStart !== undefined) {
-    style.indentStart = {
-      magnitude: item.indentStart,
-      unit: "PT",
-    };
+    style.indentStart = ptDim(item.indentStart);
     fields.push("indentStart");
   }
   if (item.pageBreakBefore !== undefined) {

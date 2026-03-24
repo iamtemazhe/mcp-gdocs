@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { documentIdParam } from "../utils/schemas.js";
 import type { docs_v1 } from "googleapis";
 import { getDocsService } from "../auth.js";
 import { textResult, handleTool } from "../utils/errors.js";
@@ -11,6 +12,8 @@ import {
 import {
   tableCellStyleItemSchema,
   buildTableCellStyleRequest,
+  buildTableCellLocation,
+  tableCellLocationParams,
 } from "../utils/styleBuilders.js";
 import { getBodyContent } from "../utils/tabs.js";
 
@@ -24,53 +27,15 @@ export function registerDocsTableTools(
   server: McpServer,
 ): void {
   server.registerTool(
-    "docs_insert_table",
-    {
-      title: "Insert Table",
-      description: "Insert empty table at index.",
-      inputSchema: {
-        documentId: z.string().describe("Document ID"),
-        tabId: tabIdParam,
-        rows: z.number().int().min(1).describe("Row count"),
-        columns: z.number().int().min(1).describe("Column count"),
-        index: z.number().int().min(1).describe("Insert index"),
-      },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        openWorldHint: true,
-        idempotentHint: false,
-      },
-    },
-    handleTool(async ({
-      documentId, tabId, rows, columns, index,
-    }) => {
-      const reqs = injectTabId([{
-        insertTable: {
-          rows,
-          columns,
-          location: { index },
-        },
-      }], tabId);
-
-      await sendBatchedRequests(documentId, reqs);
-      return textResult(
-        `Table ${rows}x${columns} at index ${index}`,
-      );
-    }),
-  );
-
-  server.registerTool(
     "docs_insert_table_row",
     {
       title: "Insert Table Row",
       description:
-        "Insert row via table cell anchor.",
+        "Insert a row above or below a row in an existing table.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
-        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
-        rowIndex: z.number().int().min(0).describe("Anchor row"),
+        ...tableCellLocationParams,
         columnIndex: z.number().int().min(0).default(0)
           .describe("Anchor column"),
         insertBelow: z.boolean().default(true).describe("Below if true"),
@@ -85,13 +50,11 @@ export function registerDocsTableTools(
     handleTool(async (params) => {
       const reqs = injectTabId([{
         insertTableRow: {
-          tableCellLocation: {
-            tableStartLocation: {
-              index: params.tableStartIndex,
-            },
-            rowIndex: params.rowIndex,
-            columnIndex: params.columnIndex,
-          },
+          tableCellLocation: buildTableCellLocation(
+            params.tableStartIndex,
+            params.rowIndex,
+            params.columnIndex,
+          ),
           insertBelow: params.insertBelow,
         },
       }], params.tabId);
@@ -110,14 +73,13 @@ export function registerDocsTableTools(
     {
       title: "Insert Table Column",
       description:
-        "Insert column via cell anchor.",
+        "Insert a column left or right of a column in an existing table.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
-        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        ...tableCellLocationParams,
         rowIndex: z.number().int().min(0).default(0)
           .describe("Anchor row"),
-        columnIndex: z.number().int().min(0).describe("Anchor column"),
         insertRight: z.boolean().default(true).describe("Right if true"),
       },
       annotations: {
@@ -130,13 +92,11 @@ export function registerDocsTableTools(
     handleTool(async (params) => {
       const reqs = injectTabId([{
         insertTableColumn: {
-          tableCellLocation: {
-            tableStartLocation: {
-              index: params.tableStartIndex,
-            },
-            rowIndex: params.rowIndex,
-            columnIndex: params.columnIndex,
-          },
+          tableCellLocation: buildTableCellLocation(
+            params.tableStartIndex,
+            params.rowIndex,
+            params.columnIndex,
+          ),
           insertRight: params.insertRight,
         },
       }], params.tabId);
@@ -155,12 +115,11 @@ export function registerDocsTableTools(
     {
       title: "Delete Table Row",
       description:
-        "Delete one row by cell context.",
+        "Delete a row from a table.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
-        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
-        rowIndex: z.number().int().min(0).describe("Row to delete"),
+        ...tableCellLocationParams,
         columnIndex: z.number().int().min(0).default(0)
           .describe("Anchor column"),
       },
@@ -174,13 +133,11 @@ export function registerDocsTableTools(
     handleTool(async (params) => {
       const reqs = injectTabId([{
         deleteTableRow: {
-          tableCellLocation: {
-            tableStartLocation: {
-              index: params.tableStartIndex,
-            },
-            rowIndex: params.rowIndex,
-            columnIndex: params.columnIndex,
-          },
+          tableCellLocation: buildTableCellLocation(
+            params.tableStartIndex,
+            params.rowIndex,
+            params.columnIndex,
+          ),
         },
       }], params.tabId);
 
@@ -198,14 +155,13 @@ export function registerDocsTableTools(
     {
       title: "Delete Table Column",
       description:
-        "Delete one column by index.",
+        "Delete a column from a table.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
-        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        ...tableCellLocationParams,
         rowIndex: z.number().int().min(0).default(0)
           .describe("Anchor row"),
-        columnIndex: z.number().int().min(0).describe("Column to delete"),
       },
       annotations: {
         readOnlyHint: false,
@@ -217,13 +173,11 @@ export function registerDocsTableTools(
     handleTool(async (params) => {
       const reqs = injectTabId([{
         deleteTableColumn: {
-          tableCellLocation: {
-            tableStartLocation: {
-              index: params.tableStartIndex,
-            },
-            rowIndex: params.rowIndex,
-            columnIndex: params.columnIndex,
-          },
+          tableCellLocation: buildTableCellLocation(
+            params.tableStartIndex,
+            params.rowIndex,
+            params.columnIndex,
+          ),
         },
       }], params.tabId);
 
@@ -241,11 +195,11 @@ export function registerDocsTableTools(
     {
       title: "Update Table Cell Content",
       description:
-        "Bulk set cell text (0-based indices).",
+        "Replace text in specific table cells.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
-        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        tableStartIndex: tableCellLocationParams.tableStartIndex,
         items: z.array(cellContentItemSchema).min(1)
           .describe("Cells to update"),
       },
@@ -336,11 +290,11 @@ export function registerDocsTableTools(
     {
       title: "Update Table Cell Style",
       description:
-        "Bulk cell background color.",
+        "Apply background colors to table cells in bulk.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
-        tableStartIndex: z.number().int().describe("From docs_read_document format:json"),
+        tableStartIndex: tableCellLocationParams.tableStartIndex,
         items: z.array(tableCellStyleItemSchema).min(1)
           .describe("Cells to style"),
       },
@@ -375,11 +329,14 @@ export function registerDocsTableTools(
     {
       title: "Insert Table With Data",
       description:
-        "Insert table and fill cells at index.",
+        "Insert table and fill from headers/rows (index from docs_read_document "
+        + "json). Empty grid only: docs_batch_update(insertTable).",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
-        index: z.number().int().min(1).describe("Insert index"),
+        index: z.number().int().min(1).describe(
+          "Insert index from docs_read_document(format:'json')",
+        ),
         headers: z.array(z.string()).optional().describe("Header row"),
         rows: z.array(z.array(z.string())).min(1).describe("Data rows"),
       },

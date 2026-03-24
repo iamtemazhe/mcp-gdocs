@@ -4,6 +4,8 @@ build/
 .env
 .DS_Store
 TODO.md
+COMPETITORS.md
 tests/
+*.tgz
 credentials.json
 *.json.bak

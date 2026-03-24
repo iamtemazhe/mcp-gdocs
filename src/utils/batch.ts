@@ -1,6 +1,6 @@
 import type { docs_v1 } from "googleapis";
 import { z } from "zod";
-import { getDocsService } from "../auth.js";
+import { apiSemaphore, getDocsService } from "../auth.js";
 import { getBodyContent } from "./tabs.js";
 
 export const tabIdParam = z.string().optional().describe(
@@ -21,11 +21,16 @@ export async function sendBatchedRequests(
     let i = 0; i < requests.length; i += CHUNK_SIZE
   ) {
     const chunk = requests.slice(i, i + CHUNK_SIZE);
-    const result = await docs.documents.batchUpdate({
-      documentId,
-      requestBody: { requests: chunk },
-    });
-    allReplies.push(...(result.data.replies ?? []));
+    await apiSemaphore.acquire();
+    try {
+      const result = await docs.documents.batchUpdate({
+        documentId,
+        requestBody: { requests: chunk },
+      });
+      allReplies.push(...(result.data.replies ?? []));
+    } finally {
+      apiSemaphore.release();
+    }
   }
 
   return allReplies;

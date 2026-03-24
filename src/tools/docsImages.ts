@@ -5,6 +5,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { docs_v1 } from "googleapis";
 import { getDriveService } from "../auth.js";
 import { handleTool, textResult } from "../utils/errors.js";
+import { documentIdParam } from "../utils/schemas.js";
+import {
+  authMeta,
+  canDo,
+  saRestrictionNote,
+} from "../utils/authCapabilities.js";
 import {
   sendBatchedRequests,
   tabIdParam,
@@ -26,13 +32,24 @@ const MIME_MAP: Record<string, string> = {
   ".bmp": "image/bmp",
 };
 
+/** MIME type for a local image path (used by docs_insert_local_image). */
+export function mimeTypeForLocalImagePath(
+  filePath: string,
+): string {
+  const ext = extname(filePath).toLowerCase();
+  const mapped = MIME_MAP[ext];
+  if (mapped !== undefined) {
+    return mapped;
+  }
+  return "image/png";
+}
+
 const localImageItemSchema = z.object({
   filePath: z.string().describe(
     "Absolute path to image file on disk",
   ),
   index: z.number().int().min(1).describe(
-    "Insertion position (from docs_read_document "
-    + "format: json)",
+    "Insertion index from docs_read_document(format:'json')",
   ),
   width: z.number().optional().describe(
     "Width in pt (optional)",
@@ -50,11 +67,9 @@ export function registerDocsImageTools(
     {
       title: "Insert Image",
       description:
-        "Insert inline images from public URLs (bulk). Index from "
-        + "docs_read_document (format: json); optional width/height in "
-        + "pt. Local paths → docs_insert_local_image.",
+        "Insert inline images from public URLs at given body indices.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
         items: z.array(imageItemSchema).min(1)
           .describe("Array of images to insert"),
@@ -83,11 +98,9 @@ export function registerDocsImageTools(
     {
       title: "Insert Local Image",
       description:
-        "Insert image from local file: uploads to Drive, then inserts "
-        + "at index from docs_read_document (format: json). Use when "
-        + "URL-based docs_insert_image is not available.",
+        "Insert images from local files by uploading and embedding at body indices.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
         items: z.array(localImageItemSchema).min(1)
           .describe("Array of local images to insert"),
@@ -98,14 +111,19 @@ export function registerDocsImageTools(
         openWorldHint: true,
         idempotentHint: false,
       },
+      _meta: authMeta(["create_files", "upload"]),
     },
     handleTool(async ({ documentId, tabId, items }) => {
+      if (!canDo("upload")) {
+        return textResult(
+          saRestrictionNote(["create_files", "upload"]),
+        );
+      }
       const drive = await getDriveService();
       const requests: docs_v1.Schema$Request[] = [];
 
       for (const item of items) {
-        const ext = extname(item.filePath).toLowerCase();
-        const mimeType = MIME_MAP[ext] ?? "image/png";
+        const mimeType = mimeTypeForLocalImagePath(item.filePath);
         const content = await readFile(item.filePath);
 
         const uploaded = await drive.files.create({

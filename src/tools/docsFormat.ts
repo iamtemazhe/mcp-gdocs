@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { documentIdParam } from "../utils/schemas.js";
 import { handleTool, textResult } from "../utils/errors.js";
 import {
   sendBatchedRequests,
@@ -23,9 +24,10 @@ export function registerDocsFormatTools(
     {
       title: "Apply Text Style",
       description:
-        "Bulk character styles on index ranges.",
+        "Apply character formatting (bold, italic, font, color) to explicit "
+        + "index ranges.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
         items: z.array(indexedTextStyleSchema).min(1)
           .describe("Style ranges"),
@@ -54,9 +56,10 @@ export function registerDocsFormatTools(
     {
       title: "Apply Paragraph Style",
       description:
-        "Bulk paragraph styles on ranges.",
+        "Apply paragraph formatting (alignment, spacing, indentation) to "
+        + "index ranges.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
         items: z.array(indexedParagraphStyleSchema).min(1)
           .describe("Paragraph ranges"),
@@ -86,9 +89,12 @@ export function registerDocsFormatTools(
     {
       title: "Apply Heading Style",
       description:
-        "Bulk heading level on ranges (H1–H6, NORMAL).",
+        "Set named heading levels (HEADING_1 … HEADING_6 or NORMAL) on "
+        + "paragraph ranges. "
+        + "Get ranges from docs_read_document(format:'json'). "
+        + "For bullet lists use docs_batch_update (createParagraphBullets).",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
         items: z.array(indexedHeadingStyleSchema).min(1)
           .describe("Heading ranges"),

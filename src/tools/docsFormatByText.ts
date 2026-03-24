@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { documentIdParam } from "../utils/schemas.js";
 import type { docs_v1 } from "googleapis";
 import { getDocsService } from "../auth.js";
 import { textResult, handleTool } from "../utils/errors.js";
@@ -126,11 +127,9 @@ export function registerDocsFormatByTextTools(
     {
       title: "Format By Text",
       description:
-        "Find literal text and apply character styles to every match "
-        + "without indices. For precise ranges use docs_read_document "
-        + "(json) + docs_apply_text_style.",
+        "Apply character styles to every literal occurrence of given phrases.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
         items: z.array(formatByTextItemSchema).min(1)
           .describe(

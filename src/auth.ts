@@ -6,6 +6,8 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createServer } from "node:http";
+import { logger } from "./utils/logger.js";
+import { Semaphore } from "./utils/semaphore.js";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/documents",
@@ -48,7 +50,7 @@ function getTokenPath(): string {
 
 // ── OAuth helpers ──────────────────────────────────────────────────
 
-function loadOAuthClientSecrets(): OAuthClientSecrets | null {
+export function loadOAuthClientSecrets(): OAuthClientSecrets | null {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (clientId && clientSecret) {
@@ -181,7 +183,7 @@ async function interactiveOAuthFlow(): Promise<OAuth2Client> {
 
 // ── Service Account helpers ────────────────────────────────────────
 
-function createAuthFromBase64(encoded: string): GoogleAuth {
+export function createAuthFromBase64(encoded: string): GoogleAuth {
   let json: string;
   try {
     json = Buffer.from(encoded, "base64").toString("utf-8");
@@ -210,7 +212,7 @@ function createAuthFromBase64(encoded: string): GoogleAuth {
   return new GoogleAuth({ credentials, scopes: SCOPES });
 }
 
-function createServiceAccountAuth(
+export function createServiceAccountAuth(
   keyFile: string,
 ): GoogleAuth {
   if (!existsSync(keyFile)) {
@@ -242,7 +244,18 @@ async function createServiceAccountJwt(
 
 type AuthClient = GoogleAuth | OAuth2Client | JWT;
 
+export type AuthMethod = "oauth" | "service_account";
+
 let cachedAuth: AuthClient | null = null;
+let resolvedAuthMethod: AuthMethod | null = null;
+
+export function getAuthMethod(): AuthMethod {
+  return resolvedAuthMethod ?? "service_account";
+}
+
+export function isServiceAccount(): boolean {
+  return getAuthMethod() === "service_account";
+}
 
 /**
  * Приоритет аутентификации:
@@ -250,7 +263,8 @@ let cachedAuth: AuthClient | null = null;
  *  2. SERVICE_ACCOUNT_PATH — SA с JWT (+ impersonation)
  *  3. CREDENTIALS_CONFIG — base64-encoded SA JSON
  *  4. GOOGLE_APPLICATION_CREDENTIALS — путь к SA JSON
- *  5. ADC fallback
+ *
+ * Без явных credentials — ошибка (ADC не поддерживается).
  */
 async function resolveAuth(): Promise<AuthClient> {
   if (cachedAuth) {
@@ -261,7 +275,18 @@ async function resolveAuth(): Promise<AuthClient> {
   const oauthClient = await loadSavedToken();
   if (oauthClient) {
     cachedAuth = oauthClient;
+    resolvedAuthMethod = "oauth";
     return cachedAuth;
+  }
+
+  if (
+    loadOAuthClientSecrets()
+    && !existsSync(getTokenPath())
+  ) {
+    logger.warn(
+      "OAuth credentials set but token.json not found — "
+      + "falling back to service account",
+    );
   }
 
   // 2. Service Account с JWT (поддержка impersonation)
@@ -270,6 +295,7 @@ async function resolveAuth(): Promise<AuthClient> {
     cachedAuth = await createServiceAccountJwt(
       serviceAccountPath,
     );
+    resolvedAuthMethod = "service_account";
     return cachedAuth;
   }
 
@@ -277,6 +303,7 @@ async function resolveAuth(): Promise<AuthClient> {
   const credentialsConfig = process.env.CREDENTIALS_CONFIG;
   if (credentialsConfig) {
     cachedAuth = createAuthFromBase64(credentialsConfig);
+    resolvedAuthMethod = "service_account";
     return cachedAuth;
   }
 
@@ -284,12 +311,16 @@ async function resolveAuth(): Promise<AuthClient> {
   const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (keyFile) {
     cachedAuth = createServiceAccountAuth(keyFile);
+    resolvedAuthMethod = "service_account";
     return cachedAuth;
   }
 
-  // 5. ADC fallback
-  cachedAuth = new GoogleAuth({ scopes: SCOPES });
-  return cachedAuth;
+  throw new Error(
+    "No authentication credentials configured. "
+    + "Set one of: GOOGLE_CLIENT_ID+GOOGLE_CLIENT_SECRET (OAuth), "
+    + "SERVICE_ACCOUNT_PATH, CREDENTIALS_CONFIG, "
+    + "or GOOGLE_APPLICATION_CREDENTIALS.",
+  );
 }
 
 // ── Retry ──────────────────────────────────────────────────────────
@@ -309,6 +340,12 @@ const RETRY_CONFIG = {
 };
 
 // ── Public API ─────────────────────────────────────────────────────
+
+const apiSemaphore = new Semaphore(
+  parseInt(process.env.GDOCS_MAX_CONCURRENT ?? "10", 10) || 10,
+);
+
+export { apiSemaphore };
 
 export async function authorize(): Promise<void> {
   await resolveAuth();
@@ -342,3 +379,4 @@ export async function getDriveService(): Promise<drive_v3.Drive> {
   });
   return cachedDrive;
 }
+

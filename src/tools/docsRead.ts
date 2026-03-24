@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { documentIdParam } from "../utils/schemas.js";
 import { getDocsService } from "../auth.js";
 import { docToPlainText, docToMarkdown } from "../utils/docReader.js";
+import { documentToSummary } from "../utils/docSummary.js";
 import {
   textResult, jsonResult, stripEmpty, handleTool,
 } from "../utils/errors.js";
@@ -14,14 +16,25 @@ export function registerDocsReadTools(server: McpServer): void {
     {
       title: "Read Document",
       description:
-        "Read body as text, json (indices), or markdown.",
+        "Read document body in text, JSON (with indices), Markdown, or "
+        + "summary format. For multi-tab docs pass tabId from "
+        + "docs_list_document_tabs.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
         tabId: tabIdParam,
         format: z
-          .enum(["text", "json", "markdown"])
+          .enum(["text", "json", "markdown", "summary"])
           .default("text")
-          .describe("Output format"),
+          .describe(
+            "Output format: text (plain), json (structure with indices), "
+            + "markdown (formatted), summary (outline of headings/tables/images)",
+          ),
+        fields: z.string().optional().describe(
+          "Google API fields mask to limit response size. "
+          + "E.g. 'body(content(paragraph(elements(textRun(content)))))' "
+          + "or 'body(content(startIndex,endIndex,paragraph,table))'. "
+          + "Omit for full document.",
+        ),
         maxLength: z.number().int().min(1).optional()
           .describe("Max response length"),
       },
@@ -43,10 +56,10 @@ export function registerDocsReadTools(server: McpServer): void {
 
       const doc = await docs.documents.get({
         documentId,
-        ...(tabId ? { includeTabsContent: true } : {}),
         ...(format === "text"
           ? { fields: `documentId,title,${textFields}` }
           : {}),
+        ...(tabId ? { includeTabsContent: true } : {}),
       });
 
       let docData = doc.data;
@@ -66,6 +79,10 @@ export function registerDocsReadTools(server: McpServer): void {
 
       if (format === "json") {
         return jsonResult(stripEmpty(docData));
+      }
+
+      if (format === "summary") {
+        return jsonResult(documentToSummary(docData));
       }
 
       let result = format === "markdown"
@@ -88,9 +105,10 @@ export function registerDocsReadTools(server: McpServer): void {
     {
       title: "Get Document Info",
       description:
-        "Metadata: title, revisionId, body size.",
+        "Fetch document title, revision id, and body element count without "
+        + "loading full content.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
       },
       annotations: {
         readOnlyHint: true,
@@ -123,9 +141,11 @@ export function registerDocsReadTools(server: McpServer): void {
     "docs_list_document_tabs",
     {
       title: "List Document Tabs",
-      description: "List tab id and title per tab.",
+      description:
+        "List document tabs with ids, titles, and nesting for use with "
+        + "tab-scoped tools.",
       inputSchema: {
-        documentId: z.string().describe("Document ID"),
+        documentId: documentIdParam,
       },
       annotations: {
         readOnlyHint: true,
